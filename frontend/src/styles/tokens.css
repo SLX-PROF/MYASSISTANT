@@ -1,0 +1,116 @@
+/* Jarvis design tokens. Change the look here; components only use these vars. */
+
+:root {
+  /* brand */
+  --accent: #22d3ee;
+  --accent-2: #3b82f6;
+  --success: #5eead4;
+  --danger: #fb7185;
+  --warning: #fbbf24;
+
+  /* typography */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12.5px;
+  --fs-md: 14.5px;
+  --fs-lg: 17px;
+  --fs-xl: 22px;
+  --fs-2xl: 30px;
+  --lh: 1.5;
+
+  /* spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* radii */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-bubble: 18px;
+  --r-tail: 5px;
+  --r-pill: 999px;
+
+  /* motion */
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 360ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* layout */
+  --sidebar-w: 288px;
+  --panel-w: 340px;
+  --chat-max: 780px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ---------------------------------------------------------------- dark */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #04060c;
+  --bg-2: #070c18;
+  --surface: rgba(12, 18, 32, 0.72);
+  --surface-2: rgba(15, 22, 38, 0.78);
+  --surface-solid: #0c1322;
+  --surface-hover: rgba(125, 211, 252, 0.06);
+  --border: rgba(125, 211, 252, 0.13);
+  --border-strong: rgba(125, 211, 252, 0.24);
+  --text: #eaf2ff;
+  --text-2: #c3d3ee;
+  --muted: #8fa3c4;
+  --faint: #7485a6;
+  --on-accent: #04060c;
+  --bubble-me: linear-gradient(135deg, color-mix(in oklab, var(--accent-2) 32%, transparent), color-mix(in oklab, var(--accent) 16%, transparent));
+  --bubble-me-border: color-mix(in oklab, var(--accent) 30%, transparent);
+  --bubble-bot: rgba(15, 22, 38, 0.72);
+  --glow: 0 0 24px -10px color-mix(in oklab, var(--accent) 70%, transparent);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 12px 40px -12px rgba(0, 0, 0, 0.7);
+  --backdrop: radial-gradient(1100px 760px at 12% -8%, color-mix(in oklab, var(--accent) 10%, transparent), transparent 60%),
+    radial-gradient(900px 700px at 108% 6%, color-mix(in oklab, var(--accent-2) 12%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+  --accent-text: color-mix(in oklab, var(--accent) 88%, white);
+  --code-bg: rgba(2, 6, 14, 0.7);
+}
+
+/* --------------------------------------------------------------- light */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f6fb;
+  --bg-2: #e9eff8;
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-2: rgba(255, 255, 255, 0.92);
+  --surface-solid: #ffffff;
+  --surface-hover: rgba(15, 50, 110, 0.05);
+  --border: rgba(15, 40, 90, 0.1);
+  --border-strong: rgba(15, 40, 90, 0.18);
+  --text: #0b1220;
+  --text-2: #26324a;
+  --muted: #4a5875;
+  --faint: #5b6882;
+  --on-accent: #04060c;
+  --success: #0b7d6d;
+  --warning: #9a6700;
+  --danger: #c0264b;
+  --bubble-me: linear-gradient(135deg, color-mix(in oklab, var(--accent-2) 16%, white), color-mix(in oklab, var(--accent) 12%, white));
+  --bubble-me-border: color-mix(in oklab, var(--accent) 35%, transparent);
+  --bubble-bot: rgba(255, 255, 255, 0.9);
+  --glow: 0 8px 24px -14px color-mix(in oklab, var(--accent-2) 60%, transparent);
+  --shadow-1: 0 1px 2px rgba(15, 30, 60, 0.08);
+  --shadow-2: 0 18px 50px -20px rgba(15, 30, 60, 0.35);
+  --backdrop: radial-gradient(1100px 760px at 12% -8%, color-mix(in oklab, var(--accent) 14%, transparent), transparent 60%),
+    radial-gradient(900px 700px at 108% 6%, color-mix(in oklab, var(--accent-2) 10%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+  --accent-text: color-mix(in oklab, var(--accent) 55%, #0b1220);
+  --code-bg: #0f172a;
+}

@@ -85,7 +85,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
     for r in (auth.router, chat.router, items.router, notifications.router):
         app.include_router(r)
 
-    @app.get("/api/health")
+    @app.api_route("/api/health", methods=["GET", "HEAD"])
     async def health():
         return {"status": "ok"}
 
@@ -93,7 +93,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
     async def api_not_found(path: str):
         raise HTTPException(404, "Не найдено")
 
-    @app.get("/{path:path}", include_in_schema=False)
+    @app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     async def frontend(path: str, request: Request):
         """Serve the built SPA; unknown paths fall back to index.html."""
         if not WEB_DIR.exists():

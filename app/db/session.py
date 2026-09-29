@@ -43,6 +43,7 @@ def run_migrations(database_url: str) -> None:
     from alembic.config import Config
 
     cfg = Config(str(PROJECT_ROOT / "alembic.ini"))
+    cfg.attributes["skip_logging"] = True  # keep the app's logging config
     cfg.set_main_option("script_location", str(PROJECT_ROOT / "alembic"))
     cfg.set_main_option("sqlalchemy.url", database_url.replace("+aiosqlite", ""))
     command.upgrade(cfg, "head")
