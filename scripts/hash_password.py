@@ -1,0 +1,31 @@
+"""Generate the PASSWORD_HASH value for .env.
+
+Usage:
+    python scripts/hash_password.py
+    docker compose run --rm jarvis python scripts/hash_password.py
+"""
+
+from __future__ import annotations
+
+import getpass
+import sys
+
+from argon2 import PasswordHasher
+
+
+def main() -> int:
+    pw = getpass.getpass("Придумайте пароль: ")
+    if len(pw) < 10:
+        print("Пароль слишком короткий: нужно не меньше 10 символов.", file=sys.stderr)
+        return 1
+    if getpass.getpass("Повторите пароль: ") != pw:
+        print("Пароли не совпадают.", file=sys.stderr)
+        return 1
+    h = PasswordHasher().hash(pw)
+    print("\nСкопируйте эту строку в файл .env (целиком, вместе с кавычками):\n")
+    print(f"PASSWORD_HASH='{h}'")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

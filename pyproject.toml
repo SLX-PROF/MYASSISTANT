@@ -1,0 +1,14 @@
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "Personal AI assistant (stage 1: core, web chat, reminders, tasks)"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
