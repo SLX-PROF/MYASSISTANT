@@ -1,0 +1,34 @@
+services:
+  jarvis:
+    build: .
+    image: jarvis:latest
+    container_name: jarvis
+    restart: unless-stopped
+    # Loopback only by default. To expose, put a reverse proxy with HTTPS in front
+    # (see docs/DEPLOY.md) - or, knowingly, set JARVIS_BIND=0.0.0.0 in .env.
+    ports:
+      - "${JARVIS_BIND:-127.0.0.1}:${JARVIS_PORT:-8000}:8000"
+    volumes:
+      - jarvis-data:/data          # SQLite database (and future attachments)
+      - ./.env:/app/.env:ro        # settings and secrets, read by the app
+    environment:
+      HOST: 0.0.0.0                # inside the container; host exposure is set by "ports"
+      DATA_DIR: /data
+      # Requests reach the app via Docker's proxy, so trust X-Forwarded-For from it.
+      # Safe while the port is bound to 127.0.0.1 (only a local reverse proxy can connect).
+      FORWARDED_ALLOW_IPS: "*"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  jarvis-data:

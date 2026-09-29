@@ -1,0 +1,123 @@
+# Установка на сервер (Ubuntu 24.04 + Docker)
+
+Пошаговый план на день настройки сервера. Команды вводятся по одной. Если что-то пошло не так, пришлите мне вывод команды целиком.
+
+## 0. Что понадобится
+
+- **VPS за границей:** 1 vCPU, 1–2 ГБ RAM, 20 ГБ диска. Для этапа 1 этого с запасом. Если позже захотите локальное распознавание речи (Whisper), берите 4 ГБ RAM.
+- **Домен или поддомен**, например `jarvis.ваш-домен.ru`, с A-записью на IP сервера. Без домена можно обойтись, см. вариант Б.
+- **Ключ Claude API**: https://console.anthropic.com → API Keys.
+
+## 1. Базовая защита сервера
+
+Подключитесь под root (`ssh root@IP`), затем выполните:
+
+```bash
+apt update && apt upgrade -y
+adduser jarvis                      # придумайте пароль
+usermod -aG sudo jarvis
+# скопировать ваш SSH-ключ новому пользователю
+rsync --archive --chown=jarvis:jarvis ~/.ssh /home/jarvis
+# файрвол: открыть только SSH и веб
+ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw --force enable
+```
+
+Проверьте в **новом** окне, что `ssh jarvis@IP` работает. После этого отключите вход под root по паролю:
+
+```bash
+sudo sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/; s/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo systemctl restart ssh
+sudo apt install -y unattended-upgrades   # автоматические обновления безопасности
+```
+
+## 2. Docker
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker jarvis
+exit          # выйти и зайти снова, чтобы группа применилась
+```
+
+Проверка: `docker run --rm hello-world`.
+
+## 3. Jarvis
+
+```bash
+git clone https://github.com/SLX-PROF/MYASSISTANT.git jarvis
+cd jarvis
+cp .env.example .env
+docker compose build
+docker compose run --rm jarvis python scripts/hash_password.py
+nano .env        # вставить PASSWORD_HASH, ANTHROPIC_API_KEY; позже COOKIE_SECURE=true
+docker compose up -d
+docker compose logs -f     # выход — Ctrl+C
+```
+
+В логах должно появиться `Jarvis started (llm=anthropic, ...)`. Приложение слушает только `127.0.0.1:8000`, из интернета его пока не видно. Так и задумано.
+
+## 4. Вариант А: HTTPS через Caddy (нужен домен)
+
+Caddy сам получает и продлевает сертификат Let's Encrypt.
+
+```bash
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install -y caddy
+```
+
+Файл `/etc/caddy/Caddyfile` (`sudo nano /etc/caddy/Caddyfile`), всё содержимое заменить на:
+
+```
+jarvis.ваш-домен.ru {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8000
+}
+```
+
+```bash
+sudo systemctl reload caddy
+```
+
+В `.env` поставьте `COOKIE_SECURE=true` и выполните `docker compose up -d --force-recreate`. Откройте `https://jarvis.ваш-домен.ru`. Установка как приложение (PWA) и уведомления работают **только по HTTPS**.
+
+## 5. Вариант Б: без публичного доступа (Tailscale)
+
+Это самый приватный вариант: Jarvis виден только вашим устройствам, наружу не открыт ни один порт.
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+sudo tailscale serve --bg --https=443 http://127.0.0.1:8000
+```
+
+Установите Tailscale на телефон и ноутбук под тем же аккаунтом. Адрес Jarvis будет вида `https://<имя-сервера>.<tailnet>.ts.net`. Порты 80/443 в ufw в этом варианте можно закрыть.
+
+## 6. Резервные копии
+
+```bash
+# копия базы внутри контейнера (безопасно на ходу), хранится 14 последних
+docker compose exec jarvis python scripts/backup_db.py
+# ежедневно в 04:15 (crontab -e и добавить строку):
+15 4 * * * cd /home/jarvis/jarvis && docker compose exec -T jarvis python scripts/backup_db.py >/dev/null 2>&1
+```
+
+Забрать копии на свой компьютер: `scp -r jarvis@IP:/var/lib/docker/volumes/jarvis_jarvis-data/_data/backups ./` (нужен sudo на сервере). Проще так: `docker compose cp jarvis:/data/backups ./backups` на сервере, затем `scp`.
+
+## 7. Обновление
+
+```bash
+cd ~/jarvis && git pull && docker compose up -d --build
+```
+
+Миграции базы применяются автоматически при старте.
+
+## 8. Если что-то не работает
+
+| Симптом | Что проверить |
+|---|---|
+| «Демо-режим: не задан ANTHROPIC_API_KEY» | ключ в `.env`, затем `docker compose up -d --force-recreate` |
+| «Пароль не настроен» | строка `PASSWORD_HASH='...'` в `.env`, с одинарными кавычками |
+| После входа снова просит пароль | по HTTP стоит `COOKIE_SECURE=true`: либо включите HTTPS, либо поставьте `false` |
+| Напоминание пришло с опозданием | часовой пояс `TIMEZONE`, логи `docker compose logs | grep reminder` |
+| «Нет связи с сервером модели» | доступ сервера к `api.anthropic.com`: `curl -I https://api.anthropic.com` |
