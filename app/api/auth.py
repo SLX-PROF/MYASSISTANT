@@ -16,6 +16,7 @@ from app.security import (
     require_session,
     set_session_cookie,
     verify_password,
+    verify_totp,
 )
 
 log = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 class LoginIn(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
+    code: str | None = Field(default=None, max_length=10)
 
 
 def _app_info(request: Request) -> dict:
@@ -54,6 +56,11 @@ async def login(body: LoginIn, request: Request, response: Response):
         limiter.record_failure(ip)
         log.warning("failed login from %s", ip)
         raise HTTPException(status_code=401, detail="Неверный пароль")
+    totp = settings.totp_secret.get_secret_value()
+    if totp and not verify_totp(totp, body.code or ""):
+        limiter.record_failure(ip)
+        log.warning("failed second factor from %s", ip)
+        raise HTTPException(status_code=401, detail="Неверный код из приложения" if body.code else "Введите код из приложения")
     limiter.reset(ip)
     token, sess = await create_session(request, settings)
     set_session_cookie(response, token, settings)
@@ -72,5 +79,9 @@ async def logout(request: Request, response: Response, _=Depends(require_session
 async def me(request: Request):
     sess = await load_session(request)
     if sess is None:
-        return {"authenticated": False, "assistant_name": request.app.state.settings.assistant_name}
+        return {
+            "authenticated": False,
+            "assistant_name": request.app.state.settings.assistant_name,
+            "totp_required": bool(request.app.state.settings.totp_secret.get_secret_value()),
+        }
     return {"authenticated": True, "csrf_token": sess.csrf_token, **_app_info(request)}

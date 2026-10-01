@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import secrets
+import struct
 import time
 from collections import deque
 from datetime import timedelta
@@ -38,6 +40,27 @@ def verify_password(password: str, password_hash: str) -> bool:
         return _hasher.verify(password_hash, password)
     except (VerificationError, InvalidHashError):
         return False
+
+
+# ------------------------------------------------------------------- TOTP
+
+
+def totp_code(secret_b32: str, for_time: float | None = None, step: int = 30, digits: int = 6) -> str:
+    """RFC 6238 time-based one-time password (SHA-1), as used by authenticator apps."""
+    key = base64.b32decode(secret_b32.replace(" ", "").upper() + "=" * (-len(secret_b32.replace(" ", "")) % 8))
+    counter = int((time.time() if for_time is None else for_time) // step)
+    digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    value = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
+    return str(value % 10**digits).zfill(digits)
+
+
+def verify_totp(secret_b32: str, code: str, for_time: float | None = None, window: int = 1) -> bool:
+    code = (code or "").strip().replace(" ", "")
+    if not secret_b32 or not code.isdigit() or len(code) != 6:
+        return False
+    now = time.time() if for_time is None else for_time
+    return any(hmac.compare_digest(totp_code(secret_b32, now + i * 30), code) for i in range(-window, window + 1))
 
 
 def _token_hash(token: str) -> str:

@@ -93,13 +93,21 @@ sudo tailscale serve --bg --https=443 http://127.0.0.1:8000
 
 Установите Tailscale на телефон и ноутбук под тем же аккаунтом. Адрес Jarvis будет вида `https://<имя-сервера>.<tailnet>.ts.net`. Порты 80/443 в ufw в этом варианте можно закрыть.
 
+## 5а. Telegram, дежурство и второй фактор
+
+1. Бот: в Telegram откройте @BotFather → `/newbot` → получите токен. Свой chat ID узнайте у @userinfobot.
+2. В `.env` на сервере (`nano .env`) впишите `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS`, `LLM_MONTHLY_BUDGET_USD=10`, а также параметры сайта: `SITE_BASE_URL`, `SITE_FEED_KEY`, `SITE_STATUS_PATH`, `ADMIN_URL`, `SITE_IP`. Токен и ключи никому не присылайте.
+3. Второй фактор входа: `docker compose run --rm jarvis python scripts/totp_setup.py`, ключ добавьте в приложение-аутентификатор, строку `TOTP_SECRET=...` — в `.env`.
+4. `docker compose up -d --force-recreate`, затем напишите боту `/status`.
+
+В логах должно появиться `telegram=on, monitoring=on`. Регулярные задачи создаются сами; дату платежа за домен задайте в `DOMAIN_RENEWAL_DATE=ММ-ДД`, после этого появится и напоминание о домене.
+
 ## 6. Резервные копии
 
+Jarvis сам делает копию базы каждую ночь в 04:15 (хранятся 14 последних, папка `/data/backups`). Сделать копию вручную:
+
 ```bash
-# копия базы внутри контейнера (безопасно на ходу), хранится 14 последних
 docker compose exec jarvis python scripts/backup_db.py
-# ежедневно в 04:15 (crontab -e и добавить строку):
-15 4 * * * cd /home/jarvis/jarvis && docker compose exec -T jarvis python scripts/backup_db.py >/dev/null 2>&1
 ```
 
 Забрать копии на свой компьютер: `scp -r jarvis@IP:/var/lib/docker/volumes/jarvis_jarvis-data/_data/backups ./` (нужен sudo на сервере). Проще так: `docker compose cp jarvis:/data/backups ./backups` на сервере, затем `scp`.

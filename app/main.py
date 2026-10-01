@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.api import auth, chat, items, notifications
 from app.channels.base import CompositeNotifier
+from app.channels.telegram import TelegramAPI, TelegramBot, TelegramNotifier
 from app.channels.web import WebNotifier
 from app.config import Settings, get_settings
 from app.core.agent import Agent
@@ -19,6 +20,14 @@ from app.core.llm.base import LLMError, LLMProvider
 from app.core.llm.fake import FakeProvider
 from app.db.session import Database, migrate
 from app.events import EventBus
+from app.monitor.alerts import AlertManager
+from app.monitor.commands import CommandHandler
+from app.monitor.explain import Explainer
+from app.monitor.messenger import Messenger
+from app.monitor.regular import RegularTasks
+from app.monitor.service import MonitorService
+from app.monitor.site import SiteClient
+from app.monitor.tools import monitor_tools
 from app.scheduler import ReminderScheduler
 from app.security import LoginRateLimiter, SecurityMiddleware
 from app.tools.builtin import build_registry
@@ -47,7 +56,15 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
         await migrate(settings.database_url)
         db = Database(settings.database_url)
         bus = EventBus()
-        scheduler = ReminderScheduler(db, settings, CompositeNotifier([WebNotifier(bus)]))
+        telegram = (
+            TelegramAPI(settings.telegram_bot_token.get_secret_value(), settings.telegram_api_base)
+            if settings.telegram_enabled
+            else None
+        )
+        notifiers = [WebNotifier(bus)]
+        if telegram:
+            notifiers.append(TelegramNotifier(telegram, settings.telegram_chat_ids))
+        scheduler = ReminderScheduler(db, settings, CompositeNotifier(notifiers))
 
         llm_warning = None
         llm = provider
@@ -59,23 +76,58 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
                 llm_warning = e.user_message
                 llm = FakeProvider(tz=settings.tz)
 
+        # Site duty, regular tasks, Telegram
+        messenger = Messenger(settings, db, bus, telegram)
+        explainer = Explainer(db, settings, llm) if not isinstance(llm, FakeProvider) else None
+        alerts = AlertManager(db, messenger, explainer)
+        regular = RegularTasks(db, settings)
+        site = SiteClient(settings) if settings.monitoring_enabled else None
+        monitor = MonitorService(db, settings, messenger, alerts, regular, site)
+        extra_tools = monitor_tools(monitor, regular) if settings.monitoring_enabled else []
+
         st = app.state
         st.settings = settings
         st.db = db
         st.bus = bus
         st.scheduler = scheduler
-        st.agent = Agent(db, settings, llm, build_registry(), scheduler)
+        st.monitor = monitor
+        st.agent = Agent(db, settings, llm, build_registry(extra_tools), scheduler)
+        st.agent.after_usage = monitor.budget_watch
         st.llm_warning = llm_warning
         st.login_limiter = LoginRateLimiter(settings.login_max_attempts, settings.login_window_minutes * 60)
         st.active_runs = set()
         st.background_tasks = set()
 
         await scheduler.start()
-        log.info("Jarvis started (llm=%s, model=%s, tz=%s)", llm.name, llm.model, settings.timezone)
+        if settings.monitoring_enabled:
+            created, skipped = await regular.seed()
+            if created:
+                log.info("regular tasks created: %s", ", ".join(created))
+            if skipped:
+                log.info("regular tasks skipped (not configured): %s", ", ".join(skipped))
+        monitor.register_jobs(scheduler.add_job)
+        bot = None
+        if telegram:
+            bot = TelegramBot(telegram, settings, db, CommandHandler(db, monitor, regular, st.agent))
+            bot.start()
+        log.info(
+            "Jarvis started (llm=%s, model=%s, tz=%s, telegram=%s, monitoring=%s)",
+            llm.name,
+            llm.model,
+            settings.timezone,
+            "on" if telegram else "off",
+            "on" if site else "off",
+        )
         try:
             yield
         finally:
+            if bot:
+                await bot.stop()
             await scheduler.shutdown()
+            if site:
+                await site.aclose()
+            if telegram:
+                await telegram.aclose()
             await llm.aclose()
             await db.dispose()
 

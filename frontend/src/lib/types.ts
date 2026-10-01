@@ -80,6 +80,7 @@ export interface Me {
   timezone?: string;
   llm_provider?: string;
   llm_warning?: string | null;
+  totp_required?: boolean;
 }
 
 export interface UISettings {

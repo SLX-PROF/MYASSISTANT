@@ -103,6 +103,12 @@ class ReminderScheduler:
             misfire_grace_time=None,
         )
 
+    def add_job(self, func, trigger, job_id: str) -> None:
+        """Register another periodic job on the shared scheduler."""
+        if self._sched is None:
+            raise RuntimeError("scheduler not started")
+        self._sched.add_job(func, trigger, id=job_id, replace_existing=True, coalesce=True, max_instances=1)
+
     def unschedule(self, reminder_id: int) -> None:
         if self._sched is None:
             return

@@ -66,7 +66,8 @@ const del = <T>(p: string) => request<T>("DELETE", p);
 
 export const api = {
   me: () => get<Me>("/api/auth/me"),
-  login: (password: string) => post<Me & { csrf_token: string }>("/api/auth/login", { password }),
+  login: (password: string, code?: string) =>
+    post<Me & { csrf_token: string }>("/api/auth/login", { password, ...(code ? { code } : {}) }),
   logout: () => post<{ ok: boolean }>("/api/auth/logout"),
 
   conversations: () => get<Conversation[]>("/api/conversations"),

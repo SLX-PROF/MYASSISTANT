@@ -176,8 +176,10 @@ async def forget_fact(a: IdArgs, ctx: ToolContext) -> ToolOutcome:
 # ------------------------------------------------------------------ registry
 
 
-def build_registry() -> ToolRegistry:
+def build_registry(extra: list[Tool] | None = None) -> ToolRegistry:
     reg = ToolRegistry()
+    for tool in extra or []:
+        reg.register(tool)
     for tool in [
         Tool("get_current_time", "Текущие дата и время в часовом поясе пользователя.", NoArgs, get_current_time, "Смотрю на часы…"),
         Tool(
