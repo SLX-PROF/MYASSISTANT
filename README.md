@@ -6,7 +6,7 @@
 - **Агент ничего не выполняет сам.** У него нет shell, файлов и интернета. Доступно только 11 инструментов: время, напоминания, задачи и память.
 - **Приватность.** Секреты лежат только в `.env`. В логах по умолчанию нет текстов сообщений. Шрифты и иконки хранятся локально, запросов к CDN нет.
 
-Скриншоты интерфейса лежат в [`docs/screenshots/`](docs/screenshots). Предложения и идеи на следующие этапы: [`docs/IDEAS_AND_CHANGES.md`](docs/IDEAS_AND_CHANGES.md). Спецификация дежурства по сайту: [`docs/MONITORING_SPEC.md`](docs/MONITORING_SPEC.md). Установка на сервер описана в [`docs/DEPLOY.md`](docs/DEPLOY.md).
+Скриншоты интерфейса лежат в [`docs/screenshots/`](docs/screenshots). Предложения и идеи на следующие этапы: [`docs/IDEAS_AND_CHANGES.md`](docs/IDEAS_AND_CHANGES.md). Спецификации: дежурство по сайту [`docs/MONITORING_SPEC.md`](docs/MONITORING_SPEC.md), регулярные задачи [`docs/REGULAR_TASKS_SPEC.md`](docs/REGULAR_TASKS_SPEC.md), общий план работ [`docs/ROADMAP.md`](docs/ROADMAP.md). Установка на сервер описана в [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ---
 
