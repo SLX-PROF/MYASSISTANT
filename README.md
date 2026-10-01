@@ -6,7 +6,7 @@
 - **Агент ничего не выполняет сам.** У него нет shell, файлов и интернета. Доступно только 11 инструментов: время, напоминания, задачи и память.
 - **Приватность.** Секреты лежат только в `.env`. В логах по умолчанию нет текстов сообщений. Шрифты и иконки хранятся локально, запросов к CDN нет.
 
-Скриншоты интерфейса лежат в [`docs/screenshots/`](docs/screenshots). Предложения и идеи на следующие этапы: [`docs/IDEAS_AND_CHANGES.md`](docs/IDEAS_AND_CHANGES.md). Установка на сервер описана в [`docs/DEPLOY.md`](docs/DEPLOY.md).
+Скриншоты интерфейса лежат в [`docs/screenshots/`](docs/screenshots). Предложения и идеи на следующие этапы: [`docs/IDEAS_AND_CHANGES.md`](docs/IDEAS_AND_CHANGES.md). Спецификация дежурства по сайту: [`docs/MONITORING_SPEC.md`](docs/MONITORING_SPEC.md). Установка на сервер описана в [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ---
 
@@ -122,7 +122,7 @@ pytest -q
 | `PASSWORD_HASH` | хеш пароля (argon2), создаётся `scripts/hash_password.py` | — (обязательно) |
 | `LLM_PROVIDER` | `anthropic` (Claude), `fake` (демо), `openai_compat` (заготовка) | `anthropic` |
 | `ANTHROPIC_API_KEY` | ключ Claude API | — |
-| `LLM_MODEL` | модель. Дешевле: `claude-sonnet-5-5` | `claude-opus-5-5` |
+| `LLM_MODEL` | модель (для чата и дежурства по сайту). Сильнее и вдвое дороже: `claude-opus-5-5` | `claude-sonnet-5-5` |
 | `LLM_EFFORT` | глубина размышлений (и стоимость): `low` … `max` | `low` |
 | `LLM_REFUSAL_FALLBACK` | если модель откажется, повторить на запасной модели | `true` |
 | `TIMEZONE` | часовой пояс для «завтра в 10» | `Europe/Moscow` |

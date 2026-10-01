@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # --- LLM -------------------------------------------------------------
     llm_provider: str = "anthropic"  # anthropic | fake | openai_compat
-    llm_model: str = "claude-opus-5-5"
+    llm_model: str = "claude-sonnet-5-5"
     # Thinking depth / cost lever: low | medium | high | xhigh | max
     llm_effort: str = "low"
     llm_max_tokens: int = 16000
