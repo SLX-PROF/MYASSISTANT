@@ -1,7 +1,7 @@
 export type Role = "user" | "assistant" | "tool" | "notification";
 
 export interface Recurrence {
-  kind: "none" | "daily" | "weekly" | "monthly";
+  kind: "none" | "daily" | "weekly" | "monthly" | "yearly";
   time?: string;
   weekdays?: number[];
   anchor_day?: number;

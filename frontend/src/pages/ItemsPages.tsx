@@ -169,7 +169,7 @@ export function ReminderList({ compact = false }: { compact?: boolean }) {
   );
   const [text, setText] = useState("");
   const [when, setWhen] = useState(nextHourInput);
-  const [rec, setRec] = useState<"none" | "daily" | "weekly" | "monthly">("none");
+  const [rec, setRec] = useState<"none" | "daily" | "weekly" | "monthly" | "quarterly" | "yearly">("none");
   const [days, setDays] = useState<string[]>([]);
 
   const add = async (e: React.FormEvent) => {
@@ -179,7 +179,8 @@ export function ReminderList({ compact = false }: { compact?: boolean }) {
       await api.createReminder({
         text: text.trim(),
         when: localInputToIso(when),
-        recurrence: rec,
+        recurrence: rec === "quarterly" ? "monthly" : rec,
+        interval_months: rec === "quarterly" ? 3 : 1,
         weekdays: rec === "weekly" && days.length ? days : undefined,
       });
       setText("");
@@ -221,6 +222,8 @@ export function ReminderList({ compact = false }: { compact?: boolean }) {
               <option value="daily">Каждый день</option>
               <option value="weekly">По дням недели</option>
               <option value="monthly">Каждый месяц</option>
+              <option value="quarterly">Раз в квартал</option>
+              <option value="yearly">Каждый год</option>
             </select>
           </>
         )}

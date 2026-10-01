@@ -151,6 +151,67 @@ class Setting(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
+class Lead(Base):
+    """A site lead as received from the feed. Never contains personal data."""
+
+    __tablename__ = "leads"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)  # site's id
+    created_at: Mapped[datetime] = mapped_column(index=True)
+    type: Mapped[str] = mapped_column(String(30))
+    source: Mapped[str] = mapped_column(String(30))
+    notified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    received_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class Alert(Base):
+    """Currently active monitoring problem (one row per check key)."""
+
+    __tablename__ = "alerts"
+
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    level: Mapped[str] = mapped_column(String(10))  # warn | alarm
+    title: Mapped[str] = mapped_column(String(200))
+    detail: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime] = mapped_column(default=utcnow)
+    last_sent_at: Mapped[datetime | None] = mapped_column(default=None)
+
+
+class LLMUsage(Base):
+    __tablename__ = "llm_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow, index=True)
+    purpose: Mapped[str] = mapped_column(String(30))  # chat | monitor | telegram
+    model: Mapped[str] = mapped_column(String(100))
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    # Estimated cost in micro-dollars (integer, no float drift).
+    cost_micro_usd: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class RegularTask(Base):
+    """A recurring chore that must be confirmed with /done."""
+
+    __tablename__ = "regular_tasks"
+
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    mode: Mapped[str] = mapped_column(String(20), default="reminder")  # reminder | external
+    high_stakes: Mapped[bool] = mapped_column(Boolean, default=False)
+    schedule: Mapped[dict[str, Any]] = mapped_column(default=dict)  # recurrence rule
+    runbook: Mapped[str] = mapped_column(Text, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    next_due_at: Mapped[datetime | None] = mapped_column(default=None, index=True)
+    # Original due date while snoozed (limits total snooze to 14 days).
+    snoozed_from: Mapped[datetime | None] = mapped_column(default=None)
+    last_done_at: Mapped[datetime | None] = mapped_column(default=None)
+    # Highest escalation stage already notified for the current due date.
+    stage: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class AuthSession(Base):
     __tablename__ = "auth_sessions"
 

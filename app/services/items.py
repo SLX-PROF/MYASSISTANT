@@ -37,12 +37,13 @@ async def create_reminder(
     weekdays: list[int] | None = None,
     conversation_id: int | None = None,
     now: datetime | None = None,
+    interval: int = 1,
 ) -> Reminder:
     now = now or utcnow()
     text = text.strip()
     if not text:
         raise ItemError("Текст напоминания пустой.")
-    rule = rec.build_rule(kind, when, tz, weekdays)
+    rule = rec.build_rule(kind, when, tz, weekdays, interval=interval)
     first = when
     if when < now - PAST_TOLERANCE:
         if rule["kind"] == "none":

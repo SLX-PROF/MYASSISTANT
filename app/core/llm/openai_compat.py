@@ -24,7 +24,7 @@ class OpenAICompatProvider(LLMProvider):
         raise LLMError("Провайдер openai_compat ещё не реализован. Используйте LLM_PROVIDER=anthropic или fake.")
 
     async def stream(
-        self, *, system: str, messages: list[dict], tools: list[ToolSpec]
+        self, *, system: str, messages: list[dict], tools: list[ToolSpec], max_tokens: int | None = None
     ) -> AsyncIterator[StreamEvent]:  # pragma: no cover
         raise NotImplementedError
         yield  # makes this an async generator

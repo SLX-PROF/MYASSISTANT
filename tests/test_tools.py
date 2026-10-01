@@ -57,7 +57,7 @@ async def test_unknown_tool(registry, ctx):
         ({}, "text"),
         ({"text": "x"}, "when"),
         ({"text": "x", "when": "2026-10-01T10:00:00+03:00", "extra": 1}, "extra"),
-        ({"text": "x", "when": "2026-10-01T10:00:00+03:00", "recurrence": "yearly"}, "recurrence"),
+        ({"text": "x", "when": "2026-10-01T10:00:00+03:00", "recurrence": "hourly"}, "recurrence"),
         ({"text": "x", "when": "2026-10-01T10:00:00+03:00", "weekdays": ["monday"]}, "weekdays"),
     ],
 )

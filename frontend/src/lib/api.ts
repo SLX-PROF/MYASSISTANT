@@ -79,7 +79,7 @@ export const api = {
     ),
 
   reminders: (status = "active") => get<ReminderCardData[]>(`/api/reminders?status=${status}`),
-  createReminder: (b: { text: string; when: string; recurrence?: string; weekdays?: string[] }) =>
+  createReminder: (b: { text: string; when: string; recurrence?: string; weekdays?: string[]; interval_months?: number }) =>
     post<ReminderCardData>("/api/reminders", b),
   cancelReminder: (id: number) => post<ReminderCardData>(`/api/reminders/${id}/cancel`),
 

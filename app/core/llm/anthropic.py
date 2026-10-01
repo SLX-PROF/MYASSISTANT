@@ -33,11 +33,11 @@ class AnthropicProvider(LLMProvider):
         self.fallback = settings.llm_refusal_fallback
         self.client = AsyncAnthropic(api_key=key, max_retries=2, timeout=180.0)
 
-    def _request(self, system: str, messages: list[dict], tools: list[ToolSpec]) -> dict:
+    def _request(self, system: str, messages: list[dict], tools: list[ToolSpec], max_tokens: int | None) -> dict:
         betas = [BETA_THINKING_BINDING]
         req: dict = {
             "model": self.model,
-            "max_tokens": self.max_tokens,
+            "max_tokens": max_tokens or self.max_tokens,
             "system": system,
             "messages": messages,
             "tools": [
@@ -54,6 +54,8 @@ class AnthropicProvider(LLMProvider):
             # Automatic prompt caching of the stable prefix (tools, system, history).
             "cache_control": {"type": "ephemeral"},
         }
+        if not req["tools"]:
+            del req["tools"]
         if self.fallback:
             betas.append(BETA_FALLBACK)
             req["fallbacks"] = "default"
@@ -61,9 +63,9 @@ class AnthropicProvider(LLMProvider):
         return req
 
     async def stream(
-        self, *, system: str, messages: list[dict], tools: list[ToolSpec]
+        self, *, system: str, messages: list[dict], tools: list[ToolSpec], max_tokens: int | None = None
     ) -> AsyncIterator[StreamEvent]:
-        req = self._request(system, messages, tools)
+        req = self._request(system, messages, tools, max_tokens)
         yielded = False
         for attempt in range(2):
             try:

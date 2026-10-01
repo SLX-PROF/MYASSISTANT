@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from sqlalchemy import func, select
@@ -20,7 +20,7 @@ from app.core.prompts import context_block, system_prompt
 from app.db.models import Conversation, Message, utcnow
 from app.db.session import Database
 from app.scheduler import ReminderScheduler
-from app.services import items
+from app.services import items, usage
 from app.services.chat import DEFAULT_TITLE, message_out, title_from_text, touch
 from app.tools.registry import ToolContext, ToolRegistry
 
@@ -50,10 +50,12 @@ class Agent:
         self.provider = provider
         self.registry = registry
         self.scheduler = scheduler
+        # Called after each recorded model call (e.g. budget warnings).
+        self.after_usage: Callable[[], Awaitable[None]] | None = None
 
     # ------------------------------------------------------------------ run
 
-    async def run(self, conversation_id: int, user_text: str) -> AsyncIterator[dict]:
+    async def run(self, conversation_id: int, user_text: str, purpose: str = "chat") -> AsyncIterator[dict]:
         """Process one user message; yields UI events (dicts)."""
         user_msg = await self._save_user_message(conversation_id, user_text)
         yield {"type": "user_message", "message": message_out(user_msg)}
@@ -63,6 +65,12 @@ class Agent:
         for _ in range(self.settings.agent_max_iterations):
             history, start_id = await self._history(conversation_id)
             response: LLMResponse | None = None
+            try:
+                async with self.db.session() as s:
+                    await usage.check_budget(s, self.settings.llm_monthly_budget_usd)
+            except usage.BudgetExceeded as e:
+                yield {"type": "error", "message": e.user_message, "retryable": False}
+                return
             try:
                 async for ev in self.provider.stream(
                     system=system, messages=history, tools=self.registry.specs()
@@ -78,7 +86,7 @@ class Agent:
             if response is None:  # pragma: no cover - provider contract violation
                 yield {"type": "error", "message": "Модель не вернула ответ."}
                 return
-            self._log_usage(response)
+            await self._record_usage(response, purpose)
 
             calls = response.tool_calls
             stop = response.stop_reason
@@ -257,9 +265,18 @@ class Agent:
             )
         return build_history(rows, self.provider.name)
 
-    def _log_usage(self, r: LLMResponse) -> None:
-        if r.usage:
-            log.info("llm %s stop=%s usage=%s", r.model, r.stop_reason, r.usage)
+    async def _record_usage(self, r: LLMResponse, purpose: str) -> None:
+        if not r.usage:
+            return
+        log.info("llm %s stop=%s usage=%s", r.model, r.stop_reason, r.usage)
+        async with self.db.session() as s:
+            await usage.record(s, purpose=purpose, model=r.model, usage=r.usage)
+            await s.commit()
+        if self.after_usage:
+            try:
+                await self.after_usage()
+            except Exception:  # noqa: BLE001
+                log.exception("after_usage hook failed")
 
 
 def build_history(rows: list[Message], provider: str) -> tuple[list[dict], int | None]:

@@ -79,7 +79,7 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def stream(
-        self, *, system: str, messages: list[dict], tools: list[ToolSpec]
+        self, *, system: str, messages: list[dict], tools: list[ToolSpec], max_tokens: int | None = None
     ) -> AsyncIterator[StreamEvent]:
         """Stream one model turn: zero or more TextDelta, then exactly one Completed."""
 

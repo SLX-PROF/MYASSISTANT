@@ -25,8 +25,9 @@ def _bad(e: Exception) -> HTTPException:
 class ReminderIn(BaseModel):
     text: str = Field(min_length=1, max_length=500)
     when: str
-    recurrence: Literal["none", "daily", "weekly", "monthly"] = "none"
+    recurrence: Literal["none", "daily", "weekly", "monthly", "yearly"] = "none"
     weekdays: list[Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]] | None = None
+    interval_months: int = Field(default=1, ge=1, le=12)
 
 
 @router.get("/reminders")
@@ -50,6 +51,7 @@ async def create_reminder(body: ReminderIn, request: Request):
                 tz=tz,
                 kind=body.recurrence,
                 weekdays=[WEEKDAY_CODES.index(d) for d in body.weekdays] if body.weekdays else None,
+                interval=body.interval_months,
             )
             await s.commit()
     except (items.ItemError, TimeParseError, ValueError) as e:

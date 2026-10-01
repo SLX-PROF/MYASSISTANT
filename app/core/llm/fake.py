@@ -26,6 +26,7 @@ class FakeTurn:
     text: str = ""
     tool_calls: list[tuple[str, dict]] = field(default_factory=list)
     stop_reason: str | None = None
+    usage: dict = field(default_factory=dict)
 
 
 class FakeProvider(LLMProvider):
@@ -38,9 +39,11 @@ class FakeProvider(LLMProvider):
         self.calls: list[dict] = []  # recorded requests (for tests)
 
     async def stream(
-        self, *, system: str, messages: list[dict], tools: list[ToolSpec]
+        self, *, system: str, messages: list[dict], tools: list[ToolSpec], max_tokens: int | None = None
     ) -> AsyncIterator[StreamEvent]:
-        self.calls.append({"system": system, "messages": messages, "tools": [t.name for t in tools]})
+        self.calls.append(
+            {"system": system, "messages": messages, "tools": [t.name for t in tools], "max_tokens": max_tokens}
+        )
         turn = self._next_turn(messages)
         content: list[dict] = []
         if turn.text:
@@ -50,7 +53,11 @@ class FakeProvider(LLMProvider):
         for name, args in turn.tool_calls:
             content.append({"type": "tool_use", "id": f"toolu_fake_{next(_ids)}", "name": name, "input": args})
         stop = turn.stop_reason or ("tool_use" if turn.tool_calls else "end_turn")
-        yield Completed(LLMResponse(content=content, stop_reason=stop, provider=self.name, model=self.model))
+        yield Completed(
+            LLMResponse(
+                content=content, stop_reason=stop, provider=self.name, model=self.model, usage=dict(turn.usage)
+            )
+        )
 
     # ------------------------------------------------------------------ logic
 

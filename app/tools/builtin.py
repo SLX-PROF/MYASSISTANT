@@ -40,8 +40,11 @@ class CreateReminderArgs(_Args):
         description="Время первого срабатывания в ISO 8601 с часовым поясом, "
         "например 2026-09-30T10:00:00+03:00."
     )
-    recurrence: Literal["none", "daily", "weekly", "monthly"] = Field(
-        default="none", description="Повторение: none, daily, weekly (по дням недели), monthly."
+    recurrence: Literal["none", "daily", "weekly", "monthly", "yearly"] = Field(
+        default="none", description="Повторение: none, daily, weekly (по дням недели), monthly, yearly."
+    )
+    interval_months: int = Field(
+        default=1, ge=1, le=12, description="Для monthly: раз в N месяцев (3 = раз в квартал)."
     )
     weekdays: list[Weekday] | None = Field(
         default=None, description="Для weekly: дни недели, например [\"mon\", \"wed\"]."
@@ -60,6 +63,7 @@ async def create_reminder(a: CreateReminderArgs, ctx: ToolContext) -> ToolOutcom
         weekdays=weekdays,
         conversation_id=ctx.conversation_id,
         now=ctx.now,
+        interval=a.interval_months,
     )
     out = ToolOutcome({"created": items.reminder_for_model(r, ctx.tz)}, card=items.reminder_card(r, ctx.tz))
     if ctx.scheduler:

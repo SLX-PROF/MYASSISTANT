@@ -57,6 +57,38 @@ class Settings(BaseSettings):
     reminder_grace_seconds: int = 120
     scheduler_sweep_seconds: int = 30
 
+    # --- Spending --------------------------------------------------------
+    # Hard monthly cap for Claude API spend in USD (0 = no cap). When reached,
+    # model calls stop; Telegram, checks and reminders keep working.
+    llm_monthly_budget_usd: float = 0.0
+
+    # --- Second factor (TOTP) ---------------------------------------------
+    # Base32 secret from `python scripts/totp_setup.py`; empty = password only.
+    totp_secret: SecretStr = SecretStr("")
+
+    # --- Telegram ---------------------------------------------------------
+    telegram_bot_token: SecretStr = SecretStr("")
+    telegram_allowed_chat_ids: str = ""  # comma separated numeric chat ids
+    telegram_api_base: str = "https://api.telegram.org"
+
+    # --- Site monitoring (empty SITE_BASE_URL = monitoring off) ------------
+    site_base_url: str = ""
+    site_feed_key: SecretStr = SecretStr("")
+    site_status_path: str = ""
+    admin_url: str = ""
+    # Enable the "stub page / noindex" check once the site is launched.
+    site_launched: bool = False
+    site_app_dir: str = "/opt/forbsa-site"
+    site_ip: str = ""
+    # Domain renewal date (MM-DD) for the yearly reminder 30 days before it.
+    domain_renewal_date: str = ""
+    monitor_llm_max_tokens: int = 1200
+    monitor_llm_daily_max: int = 10
+    heartbeat_url: str = ""
+    weekly_summary_weekday: int = 0  # Monday
+    weekly_summary_time: str = "09:00"
+    regular_tasks_check_seconds: int = 300
+
     # --- Logging ---------------------------------------------------------
     log_level: str = "INFO"
     # Log message texts and tool arguments. Off by default for privacy.
@@ -66,6 +98,17 @@ class Settings(BaseSettings):
     @classmethod
     def _valid_tz(cls, v: str) -> str:
         ZoneInfo(v)  # raises for unknown zones
+        return v
+
+    @field_validator("domain_renewal_date")
+    @classmethod
+    def _valid_mmdd(cls, v: str) -> str:
+        v = v.strip()
+        if v:
+            from datetime import date
+
+            month, day = (int(x) for x in v.split("-"))
+            date(2024, month, day)  # validates (leap year allows 02-29)
         return v
 
     @field_validator("llm_effort")
@@ -87,6 +130,27 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         return f"sqlite+aiosqlite:///{self.database_path}"
+
+    @property
+    def telegram_chat_ids(self) -> set[int]:
+        out = set()
+        for part in self.telegram_allowed_chat_ids.split(","):
+            part = part.strip()
+            if part.lstrip("-").isdigit():
+                out.add(int(part))
+        return out
+
+    @property
+    def telegram_enabled(self) -> bool:
+        return bool(self.telegram_bot_token.get_secret_value() and self.telegram_chat_ids)
+
+    @property
+    def monitoring_enabled(self) -> bool:
+        return bool(self.site_base_url.strip())
+
+    @property
+    def site_url(self) -> str:
+        return self.site_base_url.strip().rstrip("/")
 
     @property
     def extra_origins(self) -> set[str]:

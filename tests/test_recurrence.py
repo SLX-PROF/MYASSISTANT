@@ -52,3 +52,47 @@ def test_monthly_clamps_without_drift():
 def test_describe():
     assert describe({"kind": "none"}) == "однократно"
     assert describe({"kind": "weekly", "time": "09:00", "weekdays": [0, 1, 2, 3, 4]}) == "по будням в 09:00"
+
+
+def test_quarterly_on_first_day():
+    first = datetime(2027, 1, 1, 10, 0, tzinfo=MSK)
+    rule = build_rule("monthly", first, MSK, interval=3)
+    seq, t = [], first.astimezone(timezone.utc)
+    for _ in range(4):
+        t = next_occurrence(rule, t)
+        seq.append(t.astimezone(MSK).date().isoformat())
+    assert seq == ["2027-04-01", "2027-07-01", "2027-10-01", "2028-01-01"]
+    assert describe(rule) == "раз в квартал, 1-го числа в 10:00"
+
+
+def test_quarterly_from_before_anchor_month():
+    rule = build_rule("monthly", datetime(2027, 1, 1, 10, 0, tzinfo=MSK), MSK, interval=3)
+    nxt = next_occurrence(rule, datetime(2026, 10, 2, 0, 0, tzinfo=MSK).astimezone(timezone.utc))
+    assert nxt.astimezone(MSK) == datetime(2027, 1, 1, 10, 0, tzinfo=MSK)
+
+
+def test_twice_a_month():
+    first = datetime(2026, 10, 1, 10, 0, tzinfo=MSK)
+    rule = build_rule("monthly", first, MSK, days=[1, 15])
+    a = next_occurrence(rule, first.astimezone(timezone.utc))
+    b = next_occurrence(rule, a)
+    assert [a.astimezone(MSK).day, b.astimezone(MSK).day] == [15, 1]
+    assert b.astimezone(MSK).month == 11
+    assert describe(rule) == "ежемесячно 1-го и 15-го числа в 10:00"
+
+
+def test_yearly_and_leap_day():
+    rule = build_rule("yearly", datetime(2026, 9, 1, 10, 0, tzinfo=MSK), MSK)
+    nxt = next_occurrence(rule, datetime(2026, 9, 1, 10, 0, tzinfo=MSK).astimezone(timezone.utc))
+    assert nxt.astimezone(MSK) == datetime(2027, 9, 1, 10, 0, tzinfo=MSK)
+    assert describe(rule) == "каждый год 1 сентября в 10:00"
+    leap = build_rule("yearly", datetime(2028, 2, 29, 9, 0, tzinfo=MSK), MSK)
+    n = next_occurrence(leap, datetime(2028, 3, 1, tzinfo=MSK).astimezone(timezone.utc))
+    assert n.astimezone(MSK).date().isoformat() == "2029-02-28"
+
+
+def test_quarterly_survives_dst_zone():
+    ny = ZoneInfo("America/New_York")
+    rule = build_rule("monthly", datetime(2027, 1, 1, 10, 0, tzinfo=ny), ny, interval=3)
+    nxt = next_occurrence(rule, datetime(2027, 1, 1, 15, 0, tzinfo=timezone.utc))
+    assert nxt.astimezone(ny).hour == 10 and nxt.astimezone(ny).month == 4
