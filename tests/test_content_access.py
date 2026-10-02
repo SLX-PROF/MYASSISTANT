@@ -121,3 +121,52 @@ async def test_publish_and_evening_reminders(db):
         text = await cs.evening_message(s, date(2026, 10, 14))
         assert text == "Завтра по плану, ещё не снято:\n• Nails day vlog — публикация 12:00 (идея)"
         assert await cs.evening_message(s, date(2026, 10, 20)) is None
+
+
+@pytest.fixture
+async def public_client(tmp_path):
+    st = Settings(
+        _env_file=None,
+        data_dir=tmp_path,
+        password_hash=_HASH,
+        content_password_hash=hash_password(HER_PASSWORD),
+        totp_secret="GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+        llm_provider="fake",
+        telegram_bot_token=TOKEN,
+        telegram_allowed_chat_ids="111",
+        content_telegram_chat_ids="222",
+        telegram_api_base="http://127.0.0.1:9",
+        public_base_url="https://plan.example.dpdns.org",
+        scheduler_sweep_seconds=3600,
+    )
+    assert st.content_miniapp_url == "https://plan.example.dpdns.org/content"
+    app = create_app(st, provider=FakeProvider())
+    async with app.router.lifespan_context(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="https://plan.example.dpdns.org") as c:
+            yield c
+
+
+async def test_public_address_is_content_only(public_client):
+    c = public_client
+    assert (await c.get("/api/auth/me")).json()["totp_required"] is False
+    # the owner's password does not work here at all
+    assert (await c.post("/api/auth/login", json={"password": PASSWORD})).status_code == 401
+    # non-content API is not even there
+    for path in ("/api/finance/summary", "/api/conversations", "/api/health", "/api/events", "/api/settings/ui"):
+        assert (await c.get(path)).status_code == 404, path
+    # the owner's Telegram account also gets only the calendar here
+    r = await c.post("/api/auth/telegram", json={"init_data": init_data(user_id=111)})
+    assert r.status_code == 200 and r.json()["scope"] == "content"
+    r = await c.post("/api/auth/login", json={"password": HER_PASSWORD})
+    assert r.status_code == 200 and r.json()["scope"] == "content"
+    c.headers["X-CSRF-Token"] = r.json()["csrf_token"]
+    assert (await c.post("/api/content/items", json={"day": "2026-10-14", "title": "Nails"})).status_code == 200
+    page = await c.get("/content")
+    assert page.status_code in (200, 503)  # 503 when the UI is not built in this checkout
+
+
+async def test_private_address_unaffected(public_client):
+    async with AsyncClient(transport=public_client._transport, base_url="http://s1824923.tailnet.ts.net") as c:
+        r = await c.post("/api/auth/login", json={"password": PASSWORD, "code": __import__("app.security", fromlist=["totp_code"]).totp_code("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")})
+        assert r.status_code == 200 and r.json()["scope"] == "all"
+        assert (await c.get("/api/finance/summary")).status_code == 200

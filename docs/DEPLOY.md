@@ -112,11 +112,53 @@ sudo tailscale serve --bg --https=443 http://127.0.0.1:8000
 
 1. Её chat ID: пусть напишет @userinfobot. Впишите в `.env`: `CONTENT_TELEGRAM_CHAT_IDS=<её id>`.
 2. Пусть откроет вашего бота и нажмёт **Start**. Бот на любое её сообщение отвечает только кнопкой «Открыть контент-план», а рядом с полем ввода у неё появится кнопка «Контент-план».
-3. Кнопка открывает календарь через Tailscale, поэтому ей тоже нужен Tailscale. Не добавляйте её в свою сеть целиком: в панели Tailscale у сервера нажмите **Share** и отправьте ей приглашение. Она поставит Tailscale со своим аккаунтом и увидит только этот сервер, без ваших остальных устройств.
+3. Без публичного адреса (раздел 5в) кнопка открывает календарь через Tailscale, и тогда ей тоже нужен Tailscale. Не добавляйте её в свою сеть целиком: в панели Tailscale у сервера нажмите **Share** и отправьте ей приглашение. Она поставит Tailscale со своим аккаунтом и увидит только этот сервер, без ваших остальных устройств.
 4. По желанию отдельный пароль для входа из браузера: `docker compose run --rm atlas python scripts/hash_password.py content` → строку `CONTENT_PASSWORD_HASH='...'` в `.env`. С этим паролем откроется только календарь.
 5. `docker compose up -d --force-recreate`.
 
 Пока `CONTENT_TELEGRAM_CHAT_IDS` пуст, напоминания контент-плана приходят вам.
+
+## 5в. Календарь для неё без Tailscale (публичный адрес)
+
+Через этот адрес открывается **только контент-календарь**: остальное API отвечает «не найдено», ваш пароль и второй фактор там не работают, любой вход получает права только на календарь. Ваша часть Атласа остаётся доступна только через Tailscale.
+
+**1. Бесплатный домен.** На https://dash.domain.digitalplat.org зарегистрируйте имя, например `atlas-plan.dpdns.org`.
+
+**2. DNS через Cloudflare (бесплатно).** На cloudflare.com: Add a site → ваш домен → тариф Free. Cloudflare покажет два nameserver — впишите их в панели DigitalPlat. Затем в Cloudflare → DNS добавьте запись:
+- Type `A`, Name `@` (или `plan`), IPv4 `141.133.175.204`, **Proxy status: DNS only** (серое облако — так надёжнее из России).
+
+Проверка с Mac через 5–30 минут: `dig +short atlas-plan.dpdns.org` → `141.133.175.204`.
+
+**3. Порты 80 и 443:**
+```bash
+sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
+```
+
+**4. Caddy (HTTPS сам получит сертификат):**
+```bash
+sudo apt install -y caddy
+sudo nano /etc/caddy/Caddyfile
+```
+Всё содержимое замените на (имя — ваше):
+```
+atlas-plan.dpdns.org {
+    encode zstd gzip
+    # Второй замок: наружу только календарь
+    @private {
+        path /api/*
+        not path /api/content* /api/auth/login /api/auth/telegram /api/auth/me /api/auth/logout
+    }
+    respond @private 404
+    reverse_proxy 127.0.0.1:8000
+}
+```
+```bash
+sudo systemctl reload caddy
+```
+
+**5. В `.env`:** `PUBLIC_BASE_URL=https://atlas-plan.dpdns.org`, затем `docker compose up -d --force-recreate`.
+
+Кнопка «Контент-план» в её боте теперь открывает публичный адрес — Tailscale ей не нужен. Открыть в браузере: `https://atlas-plan.dpdns.org/content`, вход по её паролю (`CONTENT_PASSWORD_HASH`).
 
 ## 6. Резервные копии
 

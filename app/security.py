@@ -26,6 +26,17 @@ from app.db.models import AuthSession, utcnow
 SESSION_COOKIE = "atlas_session"
 # API reachable with a content-only session.
 CONTENT_SCOPE_PATHS = ("/api/content", "/api/auth/")
+# API reachable through the public address (PUBLIC_BASE_URL) at all.
+PUBLIC_API_PATHS = ("/api/content", "/api/auth/login", "/api/auth/telegram", "/api/auth/me", "/api/auth/logout")
+
+
+def request_host(request: Request) -> str:
+    return (request.headers.get("x-forwarded-host") or request.headers.get("host", "")).lower()
+
+
+def is_public(request: Request, settings: Settings) -> bool:
+    """True when the request came through the public address (content calendar only)."""
+    return bool(settings.public_host) and request_host(request) == settings.public_host
 CSRF_HEADER = "x-csrf-token"
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -217,7 +228,8 @@ async def require_session(request: Request) -> AuthSession:
     sess = await load_session(request)
     if sess is None:
         raise HTTPException(status_code=401, detail="Требуется вход")
-    if sess.scope == "content" and not request.url.path.startswith(CONTENT_SCOPE_PATHS):
+    content_only = sess.scope == "content" or is_public(request, request.app.state.settings)
+    if content_only and not request.url.path.startswith(CONTENT_SCOPE_PATHS):
         raise HTTPException(status_code=403, detail="Доступен только контент-план")
     if request.method in UNSAFE_METHODS:
         sent = request.headers.get(CSRF_HEADER, "")
@@ -254,6 +266,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.settings = settings
 
     async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if is_public(request, self.settings) and path.startswith("/api/") and not path.startswith(PUBLIC_API_PATHS):
+            # The public address serves the content calendar and nothing else.
+            return JSONResponse({"detail": "Не найдено"}, status_code=404)
         if request.method in UNSAFE_METHODS and not self._same_origin(request):
             return JSONResponse({"detail": "Запрос с чужого сайта отклонён"}, status_code=403)
         response = await call_next(request)
@@ -279,5 +295,4 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         parts = urlsplit(origin)
         if f"{parts.scheme}://{parts.netloc}".rstrip("/") in self.settings.extra_origins:
             return True
-        host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
-        return parts.netloc == host
+        return parts.netloc.lower() == request_host(request)

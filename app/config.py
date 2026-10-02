@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     # plan): her Telegram chat ids and/or a separate web password. She sees only
     # the content calendar and gets only its notifications.
     content_telegram_chat_ids: str = ""
+    # Public HTTPS address that serves ONLY the content calendar (no Tailscale
+    # needed for her), e.g. https://plan.example.dpdns.org. Empty = off.
+    public_base_url: str = ""
     content_password_hash: SecretStr = SecretStr("")
     content_publish_remind_minutes: int = 30  # 0 = off
     content_evening_time: str = "20:00"  # "tomorrow is not filmed yet"; empty = off
@@ -148,6 +151,14 @@ class Settings(BaseSettings):
                 raise ValueError("expected HH:MM")
         return v
 
+    @field_validator("public_base_url")
+    @classmethod
+    def _valid_public_url(cls, v: str) -> str:
+        v = v.strip().rstrip("/")
+        if v and not v.startswith("https://"):
+            raise ValueError("PUBLIC_BASE_URL must start with https://")
+        return v
+
     @field_validator("llm_effort")
     @classmethod
     def _valid_effort(cls, v: str) -> str:
@@ -183,7 +194,18 @@ class Settings(BaseSettings):
 
     @property
     def content_miniapp_url(self) -> str:
+        """Where her calendar opens: the public address if set, else the Tailscale one."""
+        if not self.telegram_enabled:
+            return ""
+        if self.public_base_url:
+            return f"{self.public_base_url}/content"
         return f"{self.miniapp_url.rstrip('/')}/content" if self.miniapp_url else ""
+
+    @property
+    def public_host(self) -> str:
+        from urllib.parse import urlsplit
+
+        return urlsplit(self.public_base_url).netloc.lower() if self.public_base_url else ""
 
     @property
     def leads_chat_ids(self) -> set[int]:

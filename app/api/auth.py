@@ -16,6 +16,7 @@ from app.security import (
     require_session,
     set_session_cookie,
     verify_password,
+    is_public,
     verify_telegram_init_data,
     verify_totp,
 )
@@ -54,9 +55,11 @@ async def login(body: LoginIn, request: Request, response: Response):
             detail=f"Слишком много попыток. Попробуйте через {max(1, wait // 60)} мин.",
             headers={"Retry-After": str(wait)},
         )
-    if not settings.password_hash.get_secret_value():
+    public = is_public(request, settings)
+    if not settings.password_hash.get_secret_value() and not public:
         raise HTTPException(status_code=503, detail="Пароль не настроен: задайте PASSWORD_HASH в .env")
-    if not verify_password(body.password, settings.password_hash.get_secret_value()):
+    # Through the public address only the content password works.
+    if public or not verify_password(body.password, settings.password_hash.get_secret_value()):
         if verify_password(body.password, settings.content_password_hash.get_secret_value()):
             limiter.reset(ip)
             token, sess = await create_session(request, settings, scope="content")
@@ -89,7 +92,7 @@ async def telegram_login(body: TelegramLoginIn, request: Request, response: Resp
     Only chat ids from TELEGRAM_ALLOWED_CHAT_IDS are accepted.
     """
     settings = request.app.state.settings
-    if not settings.miniapp_url:
+    if not (settings.miniapp_url or settings.content_miniapp_url):
         raise HTTPException(status_code=404, detail="Вход через Telegram не настроен")
     limiter = request.app.state.login_limiter
     ip = client_ip(request)
@@ -102,9 +105,9 @@ async def telegram_login(body: TelegramLoginIn, request: Request, response: Resp
         limiter.record_failure(ip)
         log.warning("telegram login rejected (%s) from %s", e, ip)
         raise HTTPException(status_code=401, detail="Откройте Атлас заново из бота.") from None
-    if user["id"] in settings.telegram_chat_ids:
+    if user["id"] in settings.telegram_chat_ids and not is_public(request, settings):
         scope = "all"
-    elif user["id"] in settings.content_chat_ids:
+    elif user["id"] in settings.content_chat_ids or user["id"] in settings.telegram_chat_ids:
         scope = "content"
     else:
         limiter.record_failure(ip)
@@ -127,10 +130,12 @@ async def logout(request: Request, response: Response, _=Depends(require_session
 @router.get("/me")
 async def me(request: Request):
     sess = await load_session(request)
+    public = is_public(request, request.app.state.settings)
     if sess is None:
         return {
             "authenticated": False,
             "assistant_name": request.app.state.settings.assistant_name,
-            "totp_required": bool(request.app.state.settings.totp_secret.get_secret_value()),
+            # The second factor belongs to the owner's login, never asked on the public address.
+            "totp_required": bool(request.app.state.settings.totp_secret.get_secret_value()) and not public,
         }
-    return {"authenticated": True, "csrf_token": sess.csrf_token, **_app_info(request, sess.scope)}
+    return {"authenticated": True, "csrf_token": sess.csrf_token, **_app_info(request, "content" if public else sess.scope)}
