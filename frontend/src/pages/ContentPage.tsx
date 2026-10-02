@@ -152,7 +152,7 @@ function useDragMove(onDrop: (id: number, day: string) => void) {
   return { ghost, bind };
 }
 
-export default function ContentPage({ onExit }: { onExit: () => void }) {
+export default function ContentPage({ onExit, exitLabel }: { onExit: () => void; exitLabel?: string }) {
   const { toast } = useStore();
   const [view, setView] = useState<View>("week");
   const [anchor, setAnchor] = useState(() => new Date());
@@ -224,9 +224,15 @@ export default function ContentPage({ onExit }: { onExit: () => void }) {
       <div className="cp-col">
         <header className="cp-head">
           <div className="cp-head-row">
-            <button type="button" className="cp-round" onClick={onExit} aria-label="Вернуться в Атлас">
-              <ArrowLeft size={18} aria-hidden="true" />
-            </button>
+            {exitLabel ? (
+              <button type="button" className="cp-pill" onClick={onExit}>
+                {exitLabel}
+              </button>
+            ) : (
+              <button type="button" className="cp-round" onClick={onExit} aria-label="Вернуться в Атлас">
+                <ArrowLeft size={18} aria-hidden="true" />
+              </button>
+            )}
             <button type="button" className="cp-round" onClick={() => setSheet({ mode: "meta" })} aria-label="Изменить шапку плана">
               <Pencil size={16} aria-hidden="true" />
             </button>

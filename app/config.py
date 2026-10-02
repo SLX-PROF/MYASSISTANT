@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     # --- Content calendar and finances -----------------------------------
     # Daily "today in the content plan" message and payment reminders (HH:MM, empty = off).
     content_reminder_time: str = "10:00"
+    # Content-plan-only access for another person (e.g. a partner who runs the
+    # plan): her Telegram chat ids and/or a separate web password. She sees only
+    # the content calendar and gets only its notifications.
+    content_telegram_chat_ids: str = ""
+    content_password_hash: SecretStr = SecretStr("")
+    content_publish_remind_minutes: int = 30  # 0 = off
+    content_evening_time: str = "20:00"  # "tomorrow is not filmed yet"; empty = off
     finance_reminder_time: str = "10:05"
 
     # --- Site monitoring (empty SITE_BASE_URL = monitoring off) ------------
@@ -131,7 +138,7 @@ class Settings(BaseSettings):
             raise ValueError("TELEGRAM_MINIAPP_URL must start with https:// (Telegram requires HTTPS)")
         return v
 
-    @field_validator("content_reminder_time", "finance_reminder_time", "weekly_summary_time")
+    @field_validator("content_reminder_time", "finance_reminder_time", "weekly_summary_time", "content_evening_time")
     @classmethod
     def _valid_hhmm(cls, v: str) -> str:
         v = v.strip()
@@ -169,6 +176,14 @@ class Settings(BaseSettings):
     def miniapp_url(self) -> str:
         """Mini App needs the bot (it vouches for the user) and an HTTPS address."""
         return self.telegram_miniapp_url if self.telegram_enabled else ""
+
+    @property
+    def content_chat_ids(self) -> set[int]:
+        return _chat_ids(self.content_telegram_chat_ids) - self.telegram_chat_ids
+
+    @property
+    def content_miniapp_url(self) -> str:
+        return f"{self.miniapp_url.rstrip('/')}/content" if self.miniapp_url else ""
 
     @property
     def leads_chat_ids(self) -> set[int]:

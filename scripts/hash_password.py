@@ -3,6 +3,9 @@
 Usage:
     python scripts/hash_password.py
     docker compose run --rm atlas python scripts/hash_password.py
+
+    # password for content-plan-only access (CONTENT_PASSWORD_HASH):
+    docker compose run --rm atlas python scripts/hash_password.py content
 """
 
 from __future__ import annotations
@@ -23,7 +26,8 @@ def main() -> int:
         return 1
     h = PasswordHasher().hash(pw)
     print("\nСкопируйте эту строку в файл .env (целиком, вместе с кавычками):\n")
-    print(f"PASSWORD_HASH='{h}'")
+    name = "CONTENT_PASSWORD_HASH" if sys.argv[1:] == ["content"] else "PASSWORD_HASH"
+    print(f"{name}='{h}'")
     return 0
 
 

@@ -91,6 +91,7 @@ class TelegramBot:
         self.api = api
         self.settings = settings
         self.allowed = settings.telegram_chat_ids
+        self.content_only = settings.content_chat_ids
         self.db = db
         self.handler = handler
         self._task: asyncio.Task | None = None
@@ -107,14 +108,23 @@ class TelegramBot:
                 pass
 
     async def _setup_menu(self) -> None:
-        """The button next to the input field opens Atlas as a Mini App."""
+        """The button next to the input field opens Atlas (or only the content plan) as a Mini App."""
         if not self.settings.miniapp_url:
             return
-        for chat in self.allowed:
+        buttons = [(c, "Атлас", self.settings.miniapp_url) for c in self.allowed]
+        buttons += [(c, "Контент-план", self.settings.content_miniapp_url) for c in self.content_only]
+        for chat, text, url in buttons:
             try:
-                await self.api.set_menu_button(chat, "Атлас", self.settings.miniapp_url)
+                await self.api.set_menu_button(chat, text, url)
             except TelegramError as e:
                 log.warning("telegram menu button: %s", e)
+
+    def content_reply(self) -> BotReply:
+        """The only reply a content-only chat gets: the way into the content plan."""
+        url = self.settings.content_miniapp_url
+        if not url:
+            return BotReply("Здесь будут приходить напоминания по контент-плану.")
+        return BotReply("Контент-план открывается кнопкой ниже. Сюда приходят напоминания: что снимаем сегодня и когда публикация.", ("Открыть контент-план", url))
 
     async def _run(self) -> None:
         await self._setup_menu()
@@ -144,6 +154,18 @@ class TelegramBot:
         msg = upd.get("message") or {}
         chat_id = (msg.get("chat") or {}).get("id")
         text = msg.get("text")
+        if chat_id in self.content_only:
+            if msg.get("text"):
+                reply = self.content_reply()
+                try:
+                    markup = reply.markup()
+                    if markup:
+                        await self.api.send_message(chat_id, reply.text, markup)
+                    else:
+                        await self.api.send_message(chat_id, reply.text)
+                except TelegramError as e:
+                    log.warning("telegram send failed: %s", e)
+            return
         if chat_id not in self.allowed:
             log.info("telegram: ignored message from unknown chat")
             return

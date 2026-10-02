@@ -81,6 +81,8 @@ export interface Me {
   llm_provider?: string;
   llm_warning?: string | null;
   totp_required?: boolean;
+  /** "content" = content calendar only (e.g. a partner's access). */
+  scope?: "all" | "content";
 }
 
 export interface UISettings {

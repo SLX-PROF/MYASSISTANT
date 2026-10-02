@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.api import auth, chat, content, finance, items, notifications
 from app.channels.base import CompositeNotifier
@@ -130,7 +131,20 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             async with db.session() as s:
                 text = await content_service.today_message(s, local_today())
             if text:
-                await messenger.send(text, title="Контент-план")
+                await messenger.send_content(text)
+
+        async def content_evening() -> None:
+            async with db.session() as s:
+                text = await content_service.evening_message(s, local_today())
+            if text:
+                await messenger.send_content(text)
+
+        async def content_publish_soon() -> None:
+            async with db.session() as s:
+                texts = await content_service.publish_soon(s, utcnow().astimezone(settings.tz), settings.content_publish_remind_minutes)
+                await s.commit()
+            for text in texts:
+                await messenger.send_content(text)
 
         async def payment_reminders() -> None:
             async with db.session() as s:
@@ -142,10 +156,13 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
         for job, at, job_id in (
             (content_nudge, settings.content_reminder_time, "content-nudge"),
             (payment_reminders, settings.finance_reminder_time, "payment-reminders"),
+            (content_evening, settings.content_evening_time, "content-evening"),
         ):
             if at:
                 hh, mm = (int(x) for x in at.split(":"))
                 scheduler.add_job(job, CronTrigger(hour=hh, minute=mm, timezone=settings.tz), job_id)
+        if settings.content_publish_remind_minutes:
+            scheduler.add_job(content_publish_soon, IntervalTrigger(seconds=60), "content-publish-soon")
         bot = None
         if telegram:
             bot = TelegramBot(telegram, settings, db, CommandHandler(db, monitor, regular, st.agent))

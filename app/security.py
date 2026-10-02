@@ -24,6 +24,8 @@ from app.config import Settings
 from app.db.models import AuthSession, utcnow
 
 SESSION_COOKIE = "atlas_session"
+# API reachable with a content-only session.
+CONTENT_SCOPE_PATHS = ("/api/content", "/api/auth/")
 CSRF_HEADER = "x-csrf-token"
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -153,7 +155,7 @@ def client_ip(request: Request) -> str:
 # -------------------------------------------------------------------- sessions
 
 
-async def create_session(request: Request, settings: Settings) -> tuple[str, AuthSession]:
+async def create_session(request: Request, settings: Settings, scope: str = "all") -> tuple[str, AuthSession]:
     db = request.app.state.db
     token = secrets.token_urlsafe(32)
     now = utcnow()
@@ -164,6 +166,7 @@ async def create_session(request: Request, settings: Settings) -> tuple[str, Aut
         last_seen_at=now,
         expires_at=now + timedelta(hours=settings.session_ttl_hours),
         user_agent=(request.headers.get("user-agent") or "")[:200],
+        scope=scope,
     )
     async with db.session() as s:
         await s.execute(delete(AuthSession).where(AuthSession.expires_at < now))
@@ -214,6 +217,8 @@ async def require_session(request: Request) -> AuthSession:
     sess = await load_session(request)
     if sess is None:
         raise HTTPException(status_code=401, detail="Требуется вход")
+    if sess.scope == "content" and not request.url.path.startswith(CONTENT_SCOPE_PATHS):
+        raise HTTPException(status_code=403, detail="Доступен только контент-план")
     if request.method in UNSAFE_METHODS:
         sent = request.headers.get(CSRF_HEADER, "")
         if not hmac.compare_digest(sent, sess.csrf_token):

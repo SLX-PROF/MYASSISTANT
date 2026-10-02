@@ -70,6 +70,23 @@ class Messenger:
                 return
         await self.send(text, title="Новая заявка")
 
+    async def send_content(self, text: str) -> None:
+        """Content-plan notifications go to the content-only recipients when set
+        (through the main bot), otherwise to the owner like everything else."""
+        ids = self.settings.content_chat_ids
+        if self.telegram and ids:
+            delivered = False
+            for chat in ids:
+                try:
+                    await self.telegram.send_message(chat, text)
+                    delivered = True
+                except TelegramError as e:
+                    log.warning("content notification failed: %s", e)
+            if delivered:
+                self.sent = (self.sent + [text])[-50:]
+                return
+        await self.send(text, title="Контент-план")
+
     async def _to_web(self, text: str, title: str) -> None:
         async with self.db.session() as s:
             conv = await s.scalar(select(Conversation).where(Conversation.title == WEB_CONVERSATION_TITLE).limit(1))

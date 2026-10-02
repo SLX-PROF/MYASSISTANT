@@ -29,9 +29,12 @@ class LoginIn(BaseModel):
     code: str | None = Field(default=None, max_length=10)
 
 
-def _app_info(request: Request) -> dict:
+def _app_info(request: Request, scope: str = "all") -> dict:
     st = request.app.state
+    if scope == "content":
+        return {"assistant_name": st.settings.assistant_name, "timezone": st.settings.timezone, "scope": "content"}
     return {
+        "scope": "all",
         "assistant_name": st.settings.assistant_name,
         "timezone": st.settings.timezone,
         "llm_provider": st.agent.provider.name,
@@ -54,6 +57,12 @@ async def login(body: LoginIn, request: Request, response: Response):
     if not settings.password_hash.get_secret_value():
         raise HTTPException(status_code=503, detail="Пароль не настроен: задайте PASSWORD_HASH в .env")
     if not verify_password(body.password, settings.password_hash.get_secret_value()):
+        if verify_password(body.password, settings.content_password_hash.get_secret_value()):
+            limiter.reset(ip)
+            token, sess = await create_session(request, settings, scope="content")
+            set_session_cookie(response, token, settings)
+            log.info("content-only login from %s", ip)
+            return {"csrf_token": sess.csrf_token, **_app_info(request, "content")}
         limiter.record_failure(ip)
         log.warning("failed login from %s", ip)
         raise HTTPException(status_code=401, detail="Неверный пароль")
@@ -93,15 +102,19 @@ async def telegram_login(body: TelegramLoginIn, request: Request, response: Resp
         limiter.record_failure(ip)
         log.warning("telegram login rejected (%s) from %s", e, ip)
         raise HTTPException(status_code=401, detail="Откройте Атлас заново из бота.") from None
-    if user["id"] not in settings.telegram_chat_ids:
+    if user["id"] in settings.telegram_chat_ids:
+        scope = "all"
+    elif user["id"] in settings.content_chat_ids:
+        scope = "content"
+    else:
         limiter.record_failure(ip)
         log.warning("telegram login: user not allowed")
         raise HTTPException(status_code=403, detail="Нет доступа.")
     limiter.reset(ip)
-    token, sess = await create_session(request, settings)
+    token, sess = await create_session(request, settings, scope=scope)
     set_session_cookie(response, token, settings)
-    log.info("telegram login ok")
-    return {"csrf_token": sess.csrf_token, **_app_info(request)}
+    log.info("telegram login ok (%s)", scope)
+    return {"csrf_token": sess.csrf_token, **_app_info(request, scope)}
 
 
 @router.post("/logout")
@@ -120,4 +133,4 @@ async def me(request: Request):
             "assistant_name": request.app.state.settings.assistant_name,
             "totp_required": bool(request.app.state.settings.totp_secret.get_secret_value()),
         }
-    return {"authenticated": True, "csrf_token": sess.csrf_token, **_app_info(request)}
+    return {"authenticated": True, "csrf_token": sess.csrf_token, **_app_info(request, sess.scope)}

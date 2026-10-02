@@ -222,6 +222,8 @@ class AuthSession(Base):
     expires_at: Mapped[datetime] = mapped_column(index=True)
     last_seen_at: Mapped[datetime] = mapped_column(default=utcnow)
     user_agent: Mapped[str] = mapped_column(String(200), default="")
+    # "all" = the owner; "content" = content calendar only.
+    scope: Mapped[str] = mapped_column(String(20), default="all", server_default="all")
 
 
 # ------------------------------------------------------------ content plan

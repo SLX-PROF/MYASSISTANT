@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -283,6 +283,37 @@ async def today_message(s: AsyncSession, today: date) -> str | None:
     tomorrow = await list_items(s, today + timedelta(days=1), today + timedelta(days=1))
     tail = "\n\nЗавтра: " + "; ".join(i.title for i in tomorrow) if tomorrow else ""
     return "Сегодня по контент-плану:\n" + "\n".join(lines) + tail
+
+
+async def publish_soon(s: AsyncSession, now_local: datetime, minutes: int) -> list[str]:
+    """«Через 30 минут публикация» — once per item, day and time."""
+    today = now_local.date()
+    out = []
+    for i in await list_items(s, today, today):
+        if not i.publish_time or i.stage == "published":
+            continue
+        hh, mm = (int(x) for x in i.publish_time.split(":"))
+        at = now_local.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        left = (at - now_local).total_seconds() / 60
+        if not (0 <= left <= minutes):
+            continue
+        key = f"content_pub:{i.id}:{today.isoformat()}:{i.publish_time}"
+        if await kv.get(s, key):
+            continue
+        await kv.put(s, key, True)
+        state = "" if i.stage == "filmed" else f" Сейчас этап: {STAGE_RU[i.stage]}."
+        out.append(f"Через {max(1, round(left))} мин публикация: {i.title} ({i.publish_time}).{state}")
+    return out
+
+
+async def evening_message(s: AsyncSession, today: date) -> str | None:
+    """Evening check: tomorrow's ideas that are not filmed yet."""
+    tomorrow = today + timedelta(days=1)
+    todo = [i for i in await list_items(s, tomorrow, tomorrow) if i.stage in ("idea", "script")]
+    if not todo:
+        return None
+    lines = "\n".join(f"• {i.title}" + (f" — публикация {i.publish_time}" if i.publish_time else "") + f" ({STAGE_RU[i.stage]})" for i in todo)
+    return f"Завтра по плану, ещё не снято:\n{lines}"
 
 
 async def month_stats(s: AsyncSession, start: date, end: date) -> dict:

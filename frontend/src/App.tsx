@@ -92,7 +92,7 @@ export function App() {
 
   // After login: settings, conversations, live events.
   useEffect(() => {
-    if (!me?.authenticated) return;
+    if (!me?.authenticated || me.scope === "content") return;
     api.uiSettings().then(setUi).catch(() => undefined);
     refreshConversations();
 
@@ -122,14 +122,14 @@ export function App() {
       }
     };
     return () => es.close();
-  }, [me?.authenticated, setUi, refreshConversations, emitLiveMessage, bumpItems, toast, navigate]);
+  }, [me?.authenticated, me?.scope, setUi, refreshConversations, emitLiveMessage, bumpItems, toast, navigate]);
 
   // Telegram's own Back button on inner pages.
   useEffect(() => {
     if (!inTelegram) return;
-    tg.backButton(route.name !== "chat");
+    tg.backButton(route.name !== "chat" && me?.scope !== "content");
     return onTelegram("back_button_pressed", () => navigate({ name: "chat", id: null }));
-  }, [route.name, navigate]);
+  }, [route.name, navigate, me?.scope]);
 
   // Open the latest conversation on "/" once they are loaded.
   useEffect(() => {
@@ -168,6 +168,26 @@ export function App() {
     );
   }
   if (!me.authenticated) return <LoginPage />;
+
+  if (me.scope === "content") {
+    // Content-only access: the calendar is the whole app.
+    return (
+      <>
+        <Suspense fallback={<div className="boot" />}>
+          <ContentPage
+            onExit={() =>
+              api
+                .logout()
+                .catch(() => undefined)
+                .finally(() => setMe({ authenticated: false, assistant_name: me.assistant_name }))
+            }
+            exitLabel="Выйти"
+          />
+        </Suspense>
+        <Toasts />
+      </>
+    );
+  }
 
   if (route.name === "content") {
     return (
