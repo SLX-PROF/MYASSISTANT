@@ -19,6 +19,8 @@ from app.services import kv
 RUBRICS = ("beauty", "lifestyle", "office", "habits", "other")
 RUBRIC_RU = {"beauty": "бьюти", "lifestyle": "лайфстайл", "office": "офис", "habits": "привычки", "other": "другое"}
 STAGES = ("idea", "script", "filmed", "published")
+PLATFORMS = ("tiktok", "instagram", "youtube", "vk", "telegram", "pinterest")
+PLATFORM_RU = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube", "vk": "VK", "telegram": "Telegram", "pinterest": "Pinterest"}
 STAGE_RU = {"idea": "идея", "script": "сценарий", "filmed": "снято", "published": "опубликовано"}
 ICONS = (
     "sparkles", "heart", "camera", "coffee", "moon", "bag", "briefcase", "sun", "flower", "utensils",
@@ -54,6 +56,7 @@ def validate_fields(fields: dict) -> dict:
             raise ContentError("Название не может быть пустым.")
         out["title"] = t
     if fields.get("rubric") is not None:
+        fields = {**fields, "rubric": fields["rubric"] or "other"}
         if fields["rubric"] not in RUBRICS:
             raise ContentError(f"Рубрика: {', '.join(RUBRICS)}.")
         out["rubric"] = fields["rubric"]
@@ -68,6 +71,11 @@ def validate_fields(fields: dict) -> dict:
         if pt and not _TIME.match(pt):
             raise ContentError("Время публикации в формате ЧЧ:ММ.")
         out["publish_time"] = pt
+    if fields.get("platforms") is not None:
+        bad = [x for x in fields["platforms"] if x not in PLATFORMS]
+        if bad:
+            raise ContentError(f"Площадки: {', '.join(PLATFORMS)}.")
+        out["platforms"] = ",".join(p for p in PLATFORMS if p in fields["platforms"])
     for key, limit in (("hook", 300), ("note", 4000)):
         if fields.get(key) is not None:
             out[key] = str(fields[key]).strip()[:limit]
@@ -95,6 +103,7 @@ async def add_item(s: AsyncSession, day: date | None, **fields) -> ContentItem:
     if "title" not in data:
         raise ContentError("Нужно название идеи.")
     await _check_room(s, day)
+    data.setdefault("rubric", "other")
     item = ContentItem(day=day, position=await _next_position(s, day), **data)
     s.add(item)
     await s.flush()
@@ -126,7 +135,8 @@ async def duplicate_item(s: AsyncSession, item_id: int, day: date | None | str =
     src = await get_item(s, item_id)
     target = src.day if day == "keep" else day
     copy = await add_item(
-        s, target, title=src.title, rubric=src.rubric, icon=src.icon, publish_time=src.publish_time, hook=src.hook, note=src.note
+        s, target, title=src.title, rubric=src.rubric, icon=src.icon, publish_time=src.publish_time, hook=src.hook, note=src.note,
+        platforms=[p for p in src.platforms.split(",") if p],
     )
     for r in await refs_of(s, [src.id]):
         if r.kind == "link":
@@ -172,6 +182,7 @@ def item_out(item: ContentItem, refs: list[ContentRef]) -> dict:
         "id": item.id, "day": item.day.isoformat() if item.day else None, "position": item.position,
         "title": item.title, "rubric": item.rubric, "icon": item.icon, "stage": item.stage,
         "publish_time": item.publish_time, "hook": item.hook, "note": item.note,
+        "platforms": [p for p in (item.platforms or "").split(",") if p],
         "refs": [ref_out(r) for r in refs if r.item_id == item.id],
     }  # fmt: skip
 
@@ -279,6 +290,8 @@ async def today_message(s: AsyncSession, today: date) -> str | None:
     lines = []
     for i in items:
         when = f" · публикация {i.publish_time}" if i.publish_time else ""
+        if i.platforms:
+            when += " · " + ", ".join(PLATFORM_RU[p] for p in i.platforms.split(",") if p in PLATFORM_RU)
         lines.append(f"• {i.title} ({STAGE_RU[i.stage]}{when})")
     tomorrow = await list_items(s, today + timedelta(days=1), today + timedelta(days=1))
     tail = "\n\nЗавтра: " + "; ".join(i.title for i in tomorrow) if tomorrow else ""

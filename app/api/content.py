@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/content", tags=["content"], dependencies=[Depend
 
 Rubric = Literal["beauty", "lifestyle", "office", "habits", "other"]
 Stage = Literal["idea", "script", "filmed", "published"]
+Platform = Literal["tiktok", "instagram", "youtube", "vk", "telegram", "pinterest"]
 
 
 def _media(request: Request):
@@ -44,6 +45,7 @@ class ItemIn(BaseModel):
     icon: str = "sparkles"
     stage: Stage = "idea"
     publish_time: str = ""
+    platforms: list[Platform] = Field(default_factory=list, max_length=6)
     hook: str = Field(default="", max_length=300)
     note: str = Field(default="", max_length=4000)
 
@@ -56,6 +58,7 @@ class ItemPatch(BaseModel):
     icon: str | None = None
     stage: Stage | None = None
     publish_time: str | None = None
+    platforms: list[Platform] | None = Field(default=None, max_length=6)
     hook: str | None = Field(default=None, max_length=300)
     note: str | None = Field(default=None, max_length=4000)
 

@@ -242,6 +242,7 @@ class ContentItem(Base):
     icon: Mapped[str] = mapped_column(String(20), default="sparkles")
     stage: Mapped[str] = mapped_column(String(20), default="idea")  # idea|script|filmed|published
     publish_time: Mapped[str] = mapped_column(String(5), default="")  # HH:MM
+    platforms: Mapped[str] = mapped_column(String(100), default="", server_default="")  # comma separated
     hook: Mapped[str] = mapped_column(String(300), default="")
     note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(default=utcnow)

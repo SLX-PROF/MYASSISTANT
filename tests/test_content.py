@@ -111,3 +111,17 @@ async def test_content_api(authed):
 async def test_content_requires_login(client):
     assert (await client.get("/api/content?bank=true")).status_code == 401
     assert (await client.get("/api/finance/summary")).status_code == 401
+
+
+async def test_platforms(db):
+    async with db.session() as s:
+        it = await cs.add_item(s, D, title="Reels", platforms=["instagram", "tiktok"])
+        assert it.platforms == "tiktok,instagram"  # stored in a stable order
+        out = (await cs.items_out(s, [it]))[0]
+        assert out["platforms"] == ["tiktok", "instagram"]
+        await cs.update_item(s, it.id, platforms=[])
+        assert it.platforms == ""
+        with pytest.raises(cs.ContentError, match="Площадки"):
+            await cs.update_item(s, it.id, platforms=["myspace"])
+        copy = await cs.duplicate_item(s, (await cs.add_item(s, D, title="x", platforms=["vk"])).id)
+        assert copy.platforms == "vk"

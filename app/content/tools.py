@@ -13,6 +13,7 @@ from app.tools.registry import Tool, ToolContext, ToolOutcome
 
 Rubric = Literal["beauty", "lifestyle", "office", "habits", "other"]
 Stage = Literal["idea", "script", "filmed", "published"]
+Platform = Literal["tiktok", "instagram", "youtube", "vk", "telegram", "pinterest"]
 
 
 def _media(ctx: ToolContext):
@@ -48,6 +49,7 @@ class NewItem(_Args):
     rubric: Rubric = "other"
     icon: Literal[cs.ICONS] = "sparkles"  # type: ignore[valid-type]
     publish_time: str = Field(default="", description="ЧЧ:ММ или пусто.")
+    platforms: list[Platform] = Field(default_factory=list, description="Где публикуем: tiktok, instagram, youtube, vk, telegram, pinterest.")
     hook: str = Field(default="", max_length=300, description="Хук на первые 2 секунды.")
     note: str = Field(default="", max_length=4000, description="Заметка или сценарий.")
 
@@ -64,6 +66,7 @@ class UpdateArgs(_Args):
     icon: Literal[cs.ICONS] | None = None  # type: ignore[valid-type]
     stage: Stage | None = Field(default=None, description="idea, script, filmed (снято), published.")
     publish_time: str | None = None
+    platforms: list[Platform] | None = None
     hook: str | None = Field(default=None, max_length=300)
     note: str | None = Field(default=None, max_length=4000)
 
@@ -103,7 +106,7 @@ def content_tools() -> list[Tool]:
         for it in a.items:
             item = await cs.add_item(
                 ctx.session, _day(it.date), title=it.title, rubric=it.rubric, icon=it.icon,
-                publish_time=it.publish_time, hook=it.hook, note=it.note,
+                publish_time=it.publish_time, hook=it.hook, note=it.note, platforms=it.platforms,
             )  # fmt: skip
             made.append({"id": item.id, "day": item.day.isoformat() if item.day else None, "title": item.title})
         text = f"добавлено идей: {len(made)}" if len(made) > 1 else f"добавлено: {made[0]['title']}"

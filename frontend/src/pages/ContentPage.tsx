@@ -13,9 +13,10 @@ import "@fontsource/manrope/600.css";
 import "@fontsource/manrope/700.css";
 import "../styles/content.css";
 import { useStore } from "../lib/store";
+import { tg } from "../lib/telegram";
 import {
   addDays, contentApi, fromIso, iso, mondayOf, MONTHS, MONTHS_GEN, WD,
-  type ContentItem, type ContentMeta, type ItemFields, type Rubric, type Stage,
+  type ContentItem, type ContentMeta, type ContentRef, type ItemFields, type Platform, type Rubric, type Stage,
 } from "../lib/modules";
 
 const RUBRICS: [Rubric, string, string][] = [
@@ -32,6 +33,22 @@ const STAGES: [Stage, string][] = [
   ["filmed", "Снято"],
   ["published", "Опубликовано"],
 ];
+const PLATFORMS: [Platform, string, string][] = [
+  ["tiktok", "TikTok", "TT"],
+  ["instagram", "Instagram", "IG"],
+  ["youtube", "YouTube", "YT"],
+  ["vk", "VK", "VK"],
+  ["telegram", "Telegram", "TG"],
+  ["pinterest", "Pinterest", "P"],
+];
+const PLATFORM = Object.fromEntries(PLATFORMS.map(([k, l, s]) => [k, { label: l, short: s }])) as Record<Platform, { label: string; short: string }>;
+
+/** A reference being prepared before upload: a photo or a link, each with its own comment. */
+type RefDraft =
+  | { key: number; kind: "photo"; file: File; preview: string; caption: string }
+  | { key: number; kind: "link"; url: string; caption: string };
+let draftKey = 0;
+
 const ICONS: Record<string, LucideIcon> = {
   sparkles: Sparkles, heart: Heart, camera: Camera, coffee: Coffee, moon: Moon, bag: ShoppingBag, briefcase: Briefcase, sun: Sun,
   flower: Flower2, utensils: Utensils, shirt: Shirt, book: BookOpen, dumbbell: Dumbbell, plane: Plane, home: House, gift: Gift,
@@ -46,7 +63,8 @@ type Sheet =
   | { mode: "new"; day: string | null }
   | { mode: "edit"; item: ContentItem }
   | { mode: "move"; item: ContentItem }
-  | { mode: "link"; item: ContentItem }
+  | { mode: "refs"; item: ContentItem }
+  | { mode: "day"; day: string }
   | { mode: "meta" }
   | { mode: "theme"; week: string }
   | null;
@@ -164,6 +182,22 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   const today = iso(new Date());
 
+  // Pastel browser chrome and no dark strip under the tab bar while the calendar is open.
+  useEffect(() => {
+    const root = document.documentElement;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const prev = { bg: root.style.background, body: document.body.style.background, meta: meta?.getAttribute("content") };
+    root.style.background = "#f7f0ee";
+    document.body.style.background = "#f7f0ee";
+    meta?.setAttribute("content", "#f7f0ee");
+    tg.setColors("#f7f0ee");
+    return () => {
+      root.style.background = prev.bg;
+      document.body.style.background = prev.body;
+      if (prev.meta) meta?.setAttribute("content", prev.meta);
+    };
+  }, []);
+
   const range = useMemo(() => {
     if (view === "week") {
       const s = mondayOf(anchor);
@@ -203,6 +237,20 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
     const r = await act(() => contentApi.update(it.id, f), ok);
     if (r && detail?.id === r.id) setDetail(r);
     return r;
+  };
+
+  const uploadDrafts = async (itemId: number, drafts: RefDraft[]): Promise<ContentRef[]> => {
+    const added: ContentRef[] = [];
+    for (const d of drafts) {
+      try {
+        if (d.kind === "photo") added.push(await contentApi.addPhoto(itemId, await preparePhoto(d.file), d.caption.trim()));
+        else if (d.url.trim()) added.push(await contentApi.addLink(itemId, d.url.trim(), d.caption.trim()));
+      } catch (e) {
+        toast((e as Error).message, "error");
+      }
+    }
+    if (added.length) reload();
+    return added;
   };
 
   const { ghost, bind } = useDragMove((id, day) => {
@@ -287,10 +335,8 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
             today={today}
             bind={bind}
             over={ghost?.over ?? null}
-            onDay={(d) => {
-              setAnchor(fromIso(d));
-              setView("week");
-            }}
+            onOpen={setDetail}
+            onDay={(d) => setSheet({ mode: "day", day: d })}
           />
         ) : view === "bank" ? (
           <BankView items={items} onOpen={setDetail} onAdd={() => setSheet({ mode: "new", day: null })} onPlan={(it) => setSheet({ mode: "move", item: it })} />
@@ -333,20 +379,13 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
           onChange={(f, ok) => update(detail, f, ok)}
           onEdit={() => setSheet({ mode: "edit", item: detail })}
           onMove={() => setSheet({ mode: "move", item: detail })}
-          onLink={() => setSheet({ mode: "link", item: detail })}
+          onAddRefs={() => setSheet({ mode: "refs", item: detail })}
           onDuplicate={async () => {
             const r = await act(() => contentApi.duplicate(detail.id), "Создана копия");
             if (r) setDetail(r);
           }}
           onDelete={async () => {
             if (await act(() => contentApi.remove(detail.id), "Удалено")) setDetail(null);
-          }}
-          onPhotos={async (files) => {
-            for (const f of files) {
-              const blob = await preparePhoto(f);
-              const ref = await act(() => contentApi.addPhoto(detail.id, blob));
-              if (ref) setDetail((d) => (d ? { ...d, refs: [...d.refs, ref] } : d));
-            }
           }}
           onRemoveRef={async (refId) => {
             if (await act(() => contentApi.removeRef(refId))) setDetail((d) => (d ? { ...d, refs: d.refs.filter((r) => r.id !== refId) } : d));
@@ -361,7 +400,7 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
               item={sheet.mode === "edit" ? sheet.item : null}
               day={sheet.mode === "new" ? sheet.day : sheet.item.day}
               onCancel={() => setSheet(null)}
-              onSave={async (f, photos, link) => {
+              onSave={async (f, drafts) => {
                 if (sheet.mode === "edit") {
                   const r = await update(sheet.item, f, "Сохранено");
                   if (r) setSheet(null);
@@ -369,15 +408,7 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
                 }
                 const created = await act(() => contentApi.create({ ...f, title: f.title ?? "" }));
                 if (!created) return;
-                let full = created;
-                for (const p of photos) {
-                  const ref = await act(() => preparePhoto(p).then((b) => contentApi.addPhoto(created.id, b)));
-                  if (ref) full = { ...full, refs: [...full.refs, ref] };
-                }
-                if (link.url.trim()) {
-                  const ref = await act(() => contentApi.addLink(created.id, link.url.trim(), link.caption));
-                  if (ref) full = { ...full, refs: [...full.refs, ref] };
-                }
+                await uploadDrafts(created.id, drafts);
                 toast("Идея добавлена", "info");
                 setSheet(null);
               }}
@@ -391,15 +422,32 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
                 if (r) setSheet(null);
               }}
             />
-          ) : sheet.mode === "link" ? (
-            <LinkForm
+          ) : sheet.mode === "refs" ? (
+            <RefsForm
+              title={sheet.item.title}
               onCancel={() => setSheet(null)}
-              onSave={async (url, caption) => {
-                const ref = await act(() => contentApi.addLink(sheet.item.id, url, caption));
-                if (ref) {
-                  setDetail((d) => (d ? { ...d, refs: [...d.refs, ref] } : d));
-                  setSheet(null);
+              onSave={async (drafts) => {
+                const added = await uploadDrafts(sheet.item.id, drafts);
+                if (added.length) {
+                  setDetail((d) => (d ? { ...d, refs: [...d.refs, ...added] } : d));
+                  toast(`Добавлено референсов: ${added.length}`, "info");
                 }
+                setSheet(null);
+              }}
+            />
+          ) : sheet.mode === "day" ? (
+            <DayList
+              day={sheet.day}
+              items={byDay.get(sheet.day) ?? []}
+              onOpen={(it) => {
+                setSheet(null);
+                setDetail(it);
+              }}
+              onAdd={() => setSheet({ mode: "new", day: sheet.day })}
+              onWeek={() => {
+                setAnchor(fromIso(sheet.day));
+                setView("week");
+                setSheet(null);
               }}
             />
           ) : sheet.mode === "meta" ? (
@@ -484,6 +532,7 @@ function WeekView(props: {
                           <span className="cp-dot" style={{ background: RUBRIC[it.rubric].color }} />
                           {RUBRIC[it.rubric].label}
                           {it.publish_time && ` · ${it.publish_time}`}
+                          {it.platforms.length > 0 && ` · ${it.platforms.map((p) => PLATFORM[p].short).join(" ")}`}
                           {it.refs.length > 0 && (
                             <>
                               {" · "}
@@ -524,6 +573,7 @@ function MonthView(props: {
   today: string;
   bind: Bind;
   over: string | null;
+  onOpen: (it: ContentItem) => void;
   onDay: (day: string) => void;
 }) {
   const cells = Array.from({ length: 42 }, (_, i) => addDays(props.start, i));
@@ -554,26 +604,32 @@ function MonthView(props: {
               className={`cp-cell ${d.getMonth() !== month ? "is-out" : ""} ${key === props.today ? "is-today" : ""} ${props.over === key ? "is-over" : ""}`}
               data-drop-day={key}
             >
-              <button type="button" className="cp-cell-num" onClick={() => props.onDay(key)} aria-label={`Открыть неделю с ${label(d)}`}>
+              <button type="button" className="cp-cell-num" onClick={() => props.onDay(key)} aria-label={`Идеи на ${label(d)}`}>
                 {d.getDate()}
               </button>
               {its.slice(0, 3).map((it) => (
-                <span
+                <button
+                  type="button"
                   key={it.id}
                   className={`cp-chip ${isDone(it) ? "done" : ""}`}
                   style={{ background: RUBRIC[it.rubric].color }}
                   title={it.title}
+                  onClick={() => props.onOpen(it)}
                   {...props.bind(it.id, it.title)}
                 >
                   {it.title}
-                </span>
+                </button>
               ))}
-              {its.length > 3 && <span className="cp-more">+{its.length - 3}</span>}
+              {its.length > 3 && (
+                <button type="button" className="cp-more" onClick={() => props.onDay(key)}>
+                  +{its.length - 3}
+                </button>
+              )}
             </div>
           );
         })}
       </div>
-      <p className="cp-hint">Нажмите на число, чтобы открыть неделю. Идею можно перетащить на другой день.</p>
+      <p className="cp-hint">Нажмите на идею — откроется её карточка, на число — все идеи дня. Идею можно перетащить на другой день.</p>
     </>
   );
 }
@@ -688,16 +744,14 @@ function Detail(props: {
   onChange: (f: ItemFields, ok?: string) => void;
   onEdit: () => void;
   onMove: () => void;
-  onLink: () => void;
+  onAddRefs: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
-  onPhotos: (files: File[]) => void;
   onRemoveRef: (id: number) => void;
 }) {
   const it = props.item;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewer, setViewer] = useState<string | null>(null);
-  const file = useRef<HTMLInputElement>(null);
   const photos = it.refs.filter((r) => r.kind === "photo");
   const links = it.refs.filter((r) => r.kind === "link");
   const stageIdx = STAGES.findIndex(([k]) => k === it.stage);
@@ -721,6 +775,11 @@ function Detail(props: {
             {RUBRIC[it.rubric].label}
           </span>
           {it.publish_time && <span className="cp-chip-lg outline">публикация {it.publish_time}</span>}
+          {it.platforms.map((p) => (
+            <span key={p} className="cp-chip-lg outline">
+              {PLATFORM[p].label}
+            </span>
+          ))}
         </div>
 
         <div className="cp-stages" role="group" aria-label="Этап">
@@ -742,38 +801,24 @@ function Detail(props: {
         <section className="cp-refs">
           <div className="cp-refs-head">
             <h2 className="cp-label">РЕФЕРЕНСЫ · {it.refs.length}</h2>
-            <div className="cp-refs-actions">
-              <button type="button" className="cp-pill" onClick={() => file.current?.click()}>
-                <ImagePlus size={14} aria-hidden="true" /> Фото
-              </button>
-              <button type="button" className="cp-pill" onClick={props.onLink}>
-                <Link2 size={14} aria-hidden="true" /> Ссылка
-              </button>
-            </div>
-            <input
-              ref={file}
-              type="file"
-              accept="image/*"
-              multiple
-              hidden
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                e.target.value = "";
-                if (files.length) props.onPhotos(files);
-              }}
-            />
+            <button type="button" className="cp-pill" onClick={props.onAddRefs}>
+              <Plus size={14} aria-hidden="true" /> Добавить
+            </button>
           </div>
           {photos.length > 0 && (
             <div className="cp-photos">
               {photos.map((p) => (
-                <div key={p.id} className="cp-photo">
-                  <button type="button" className="cp-photo-open" onClick={() => setViewer(p.url)} aria-label="Открыть фото">
-                    <img src={p.url} alt={p.caption || "Референс"} loading="lazy" />
-                  </button>
-                  <button type="button" className="cp-x" onClick={() => props.onRemoveRef(p.id)} aria-label="Удалить фото">
-                    <X size={12} aria-hidden="true" />
-                  </button>
-                </div>
+                <figure key={p.id} className="cp-photo-fig">
+                  <div className="cp-photo">
+                    <button type="button" className="cp-photo-open" onClick={() => setViewer(p.url)} aria-label="Открыть фото">
+                      <img src={p.url} alt={p.caption || "Референс"} loading="lazy" />
+                    </button>
+                    <button type="button" className="cp-x" onClick={() => props.onRemoveRef(p.id)} aria-label="Удалить фото">
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  </div>
+                  {p.caption && <figcaption>{p.caption}</figcaption>}
+                </figure>
               ))}
             </div>
           )}
@@ -854,7 +899,7 @@ function ItemForm(props: {
   item: ContentItem | null;
   day: string | null;
   onCancel: () => void;
-  onSave: (f: ItemFields & { title: string }, photos: File[], link: { url: string; caption: string }) => void;
+  onSave: (f: ItemFields & { title: string }, drafts: RefDraft[]) => void;
 }) {
   const it = props.item;
   const [title, setTitle] = useState(it?.title ?? "");
@@ -864,21 +909,18 @@ function ItemForm(props: {
   const [time, setTime] = useState(it?.publish_time ?? "");
   const [hook, setHook] = useState(it?.hook ?? "");
   const [note, setNote] = useState(it?.note ?? "");
-  const [photos, setPhotos] = useState<File[]>([]);
-  const [link, setLink] = useState({ url: "", caption: "" });
+  const [platforms, setPlatforms] = useState<Platform[]>(it?.platforms ?? []);
+  const [drafts, setDrafts] = useState<RefDraft[]>([]);
   const [busy, setBusy] = useState(false);
-  const previews = useMemo(() => photos.map((p) => URL.createObjectURL(p)), [photos]);
-  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
-  const file = useRef<HTMLInputElement>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || busy) return;
     setBusy(true);
-    const f: ItemFields & { title: string; to_bank?: boolean } = { title: title.trim(), rubric, icon, publish_time: time, hook, note };
+    const f: ItemFields & { title: string; to_bank?: boolean } = { title: title.trim(), rubric, icon, publish_time: time, hook, note, platforms };
     if (day) f.day = day;
     else if (it) f.to_bank = true;
-    await props.onSave(f, photos, link);
+    await props.onSave(f, drafts);
     setBusy(false);
   };
 
@@ -900,6 +942,25 @@ function ItemForm(props: {
               {l}
             </button>
           ))}
+        </div>
+      </div>
+      <div className="cp-field">
+        <span className="cp-label">ПЛОЩАДКИ</span>
+        <div className="cp-chips">
+          {PLATFORMS.map(([k, l]) => {
+            const on = platforms.includes(k);
+            return (
+              <button
+                key={k}
+                type="button"
+                className={`cp-chip-lg pick ${on ? "on" : ""}`}
+                aria-pressed={on}
+                onClick={() => setPlatforms((ps) => (on ? ps.filter((x) => x !== k) : [...ps, k]))}
+              >
+                {l}
+              </button>
+            );
+          })}
         </div>
       </div>
       <div className="cp-field">
@@ -934,32 +995,7 @@ function ItemForm(props: {
       {!it && (
         <div className="cp-field">
           <span className="cp-label">РЕФЕРЕНСЫ</span>
-          <div className="cp-ref-pick">
-            <button type="button" className="cp-dashed" onClick={() => file.current?.click()}>
-              <ImagePlus size={18} aria-hidden="true" /> Фото
-            </button>
-            {previews.map((u, i) => (
-              <div key={u} className="cp-photo small">
-                <img src={u} alt="" />
-                <button type="button" className="cp-x" onClick={() => setPhotos((ps) => ps.filter((_, j) => j !== i))} aria-label="Убрать фото">
-                  <X size={12} aria-hidden="true" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <input
-            ref={file}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={(e) => {
-              const files = Array.from(e.target.files ?? []);
-              e.target.value = "";
-              setPhotos((ps) => [...ps, ...files].slice(0, 10));
-            }}
-          />
-          <input value={link.url} onChange={(e) => setLink({ ...link, url: e.target.value })} placeholder="Ссылка на ролик или пин (https://…)" inputMode="url" aria-label="Ссылка-референс" />
+          <RefDrafts drafts={drafts} setDrafts={setDrafts} />
         </div>
       )}
       <label className="cp-field">
@@ -1010,37 +1046,142 @@ function MoveForm(props: { item: ContentItem; onCancel: () => void; onSave: (day
   );
 }
 
-function LinkForm(props: { onCancel: () => void; onSave: (url: string, caption: string) => void }) {
-  const [url, setUrl] = useState("");
-  const [caption, setCaption] = useState("");
+function RefDrafts({ drafts, setDrafts }: { drafts: RefDraft[]; setDrafts: React.Dispatch<React.SetStateAction<RefDraft[]>> }) {
+  const file = useRef<HTMLInputElement>(null);
+  useEffect(
+    () => () => drafts.forEach((d) => d.kind === "photo" && URL.revokeObjectURL(d.preview)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const patch = (key: number, caption: string) => setDrafts((ds) => ds.map((d) => (d.key === key ? { ...d, caption } : d)));
+  return (
+    <div className="cp-drafts">
+      {drafts.map((d) => (
+        <div key={d.key} className="cp-draft">
+          {d.kind === "photo" ? (
+            <img src={d.preview} alt="" className="cp-draft-thumb" />
+          ) : (
+            <span className="cp-draft-thumb link">
+              <Link2 size={18} aria-hidden="true" />
+            </span>
+          )}
+          <div className="cp-draft-fields">
+            {d.kind === "link" && (
+              <input
+                value={d.url}
+                onChange={(e) => setDrafts((ds) => ds.map((x) => (x.key === d.key && x.kind === "link" ? { ...x, url: e.target.value } : x)))}
+                placeholder="https://…"
+                inputMode="url"
+                aria-label="Ссылка"
+              />
+            )}
+            <input value={d.caption} onChange={(e) => patch(d.key, e.target.value)} maxLength={300} placeholder="Комментарий: что нравится" aria-label="Комментарий к референсу" />
+          </div>
+          <button
+            type="button"
+            className="cp-x static"
+            aria-label="Убрать"
+            onClick={() => {
+              if (d.kind === "photo") URL.revokeObjectURL(d.preview);
+              setDrafts((ds) => ds.filter((x) => x.key !== d.key));
+            }}
+          >
+            <X size={12} aria-hidden="true" />
+          </button>
+        </div>
+      ))}
+      <div className="cp-ref-pick">
+        <button type="button" className="cp-dashed wide" onClick={() => file.current?.click()}>
+          <ImagePlus size={18} aria-hidden="true" /> Фото
+        </button>
+        <button type="button" className="cp-dashed wide" onClick={() => setDrafts((ds) => [...ds, { key: ++draftKey, kind: "link", url: "", caption: "" }])}>
+          <Link2 size={18} aria-hidden="true" /> Ссылка
+        </button>
+      </div>
+      <input
+        ref={file}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []).slice(0, 20);
+          e.target.value = "";
+          setDrafts((ds) => [...ds, ...files.map((f) => ({ key: ++draftKey, kind: "photo" as const, file: f, preview: URL.createObjectURL(f), caption: "" }))]);
+        }}
+      />
+    </div>
+  );
+}
+
+function RefsForm(props: { title: string; onCancel: () => void; onSave: (drafts: RefDraft[]) => Promise<void> }) {
+  const [drafts, setDrafts] = useState<RefDraft[]>([]);
+  const [busy, setBusy] = useState(false);
+  const ready = drafts.some((d) => d.kind === "photo" || d.url.trim());
   return (
     <form
       className="cp-form"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        props.onSave(url.trim(), caption.trim());
+        if (!ready || busy) return;
+        setBusy(true);
+        await props.onSave(drafts);
+        setBusy(false);
       }}
     >
       <div className="cp-form-head">
-        <h2>Ссылка-референс</h2>
+        <h2>Референсы</h2>
+        <span className="cp-hand-sm">{props.title}</span>
       </div>
-      <label className="cp-field">
-        <span className="cp-label">ССЫЛКА</span>
-        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.tiktok.com/@…" inputMode="url" required autoFocus />
-      </label>
-      <label className="cp-field">
-        <span className="cp-label">ЧТО НРАВИТСЯ</span>
-        <input value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={300} placeholder="подача и свет" />
-      </label>
+      <p className="cp-muted cp-small">Добавьте сразу несколько фото и ссылок, у каждого — свой комментарий.</p>
+      <RefDrafts drafts={drafts} setDrafts={setDrafts} />
       <div className="cp-form-actions">
         <button type="button" className="cp-btn ghost" onClick={props.onCancel}>
           Отмена
         </button>
-        <button type="submit" className="cp-btn">
-          Прикрепить
+        <button type="submit" className="cp-btn" disabled={!ready || busy}>
+          {busy ? "Загружаю…" : "Сохранить"}
         </button>
       </div>
     </form>
+  );
+}
+
+function DayList(props: { day: string; items: ContentItem[]; onOpen: (it: ContentItem) => void; onAdd: () => void; onWeek: () => void }) {
+  const d = fromIso(props.day);
+  return (
+    <div className="cp-form">
+      <div className="cp-form-head">
+        <h2>{label(d)}</h2>
+        <span className="cp-hand-sm">{WD[(d.getDay() + 6) % 7].toLowerCase()}</span>
+      </div>
+      {props.items.length === 0 && <p className="cp-muted">На этот день идей пока нет.</p>}
+      {props.items.map((it) => {
+        const Icon = iconOf(it.icon);
+        return (
+          <button key={it.id} type="button" className="cp-daylist-item" onClick={() => props.onOpen(it)}>
+            <Icon size={20} strokeWidth={1.4} aria-hidden="true" />
+            <span className="cp-item-main">
+              <span className="cp-item-title">{it.title}</span>
+              <span className="cp-item-meta">
+                <span className="cp-dot" style={{ background: RUBRIC[it.rubric].color }} />
+                {RUBRIC[it.rubric].label} · {STAGES.find(([k]) => k === it.stage)?.[1].toLowerCase()}
+                {it.publish_time && ` · ${it.publish_time}`}
+              </span>
+            </span>
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        );
+      })}
+      <div className="cp-form-actions">
+        <button type="button" className="cp-btn ghost" onClick={props.onWeek}>
+          Открыть неделю
+        </button>
+        <button type="button" className="cp-btn" onClick={props.onAdd}>
+          <Plus size={16} aria-hidden="true" /> Идея
+        </button>
+      </div>
+    </div>
   );
 }
 

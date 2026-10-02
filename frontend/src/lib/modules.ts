@@ -17,8 +17,10 @@ export type ContentItem = {
   publish_time: string;
   hook: string;
   note: string;
+  platforms: Platform[];
   refs: ContentRef[];
 };
+export type Platform = "tiktok" | "instagram" | "youtube" | "vk" | "telegram" | "pinterest";
 export type ContentMeta = { title: string; tags: string[]; goal: string; motto: string; week_themes: Record<string, string> };
 export type ItemFields = Partial<Omit<ContentItem, "id" | "refs" | "position">>;
 
@@ -30,7 +32,8 @@ export const contentApi = {
   duplicate: (id: number, day?: string | null) => request<ContentItem>("POST", `/api/content/items/${id}/duplicate`, { day: day ?? null }),
   remove: (id: number) => request<{ ok: boolean }>("DELETE", `/api/content/items/${id}`),
   addLink: (id: number, url: string, caption: string) => request<ContentRef>("POST", `/api/content/items/${id}/links`, { url, caption }),
-  addPhoto: (id: number, file: Blob) => upload<ContentRef>(`/api/content/items/${id}/photos`, file),
+  addPhoto: (id: number, file: Blob, caption = "") =>
+    upload<ContentRef>(`/api/content/items/${id}/photos?caption=${encodeURIComponent(caption.slice(0, 300))}`, file),
   removeRef: (refId: number) => request<{ ok: boolean }>("DELETE", `/api/content/refs/${refId}`),
   setMeta: (m: Partial<Omit<ContentMeta, "week_themes">> & { week_of?: string; week_theme?: string }) => request<ContentMeta>("PUT", "/api/content/meta", m),
   stats: (start: string, end: string) =>
