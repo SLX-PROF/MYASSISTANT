@@ -51,7 +51,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     if (res.status === 401 && path !== "/api/auth/login") {
-      window.dispatchEvent(new CustomEvent("jarvis:unauthorized"));
+      window.dispatchEvent(new CustomEvent("atlas:unauthorized"));
     }
     throw new ApiError(detailOf(data, `Ошибка ${res.status}`), res.status);
   }
@@ -123,7 +123,7 @@ export async function streamChat(
   }
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => null);
-    if (res.status === 401) window.dispatchEvent(new CustomEvent("jarvis:unauthorized"));
+    if (res.status === 401) window.dispatchEvent(new CustomEvent("atlas:unauthorized"));
     throw new ApiError(detailOf(data, `Ошибка ${res.status}`), res.status);
   }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();

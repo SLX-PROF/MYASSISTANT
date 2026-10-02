@@ -47,7 +47,7 @@ class SiteClient:
         """Fetch leads with id > after. Returns (latestId, items).
 
         Only id / createdAt / type / source are kept, whatever else the
-        endpoint might send: personal data must never reach Jarvis.
+        endpoint might send: personal data must never reach Atlas.
         """
         try:
             r = await self.client.get(

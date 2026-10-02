@@ -22,7 +22,7 @@ TELEGRAM_CONVERSATION = "Telegram"
 CONFIRM_TTL = timedelta(minutes=2)
 MAX_MUTE = timedelta(hours=24)
 
-HELP = """Команды Jarvis:
+HELP = """Команды Атласа:
 /status — состояние сайта и сервера
 /leads — последние 5 заявок (без персональных данных)
 /cost — расход Claude API за месяц
@@ -34,7 +34,7 @@ HELP = """Команды Jarvis:
 /lastdone — когда задачи выполнялись последний раз
 /help — эта справка
 
-Любой другой текст — вопрос Jarvis: напоминания, задачи, вопросы о состоянии сайта."""
+Любой другой текст — вопрос Атласу: напоминания, задачи, вопросы о состоянии сайта."""
 
 
 def parse_duration(text: str) -> timedelta | None:

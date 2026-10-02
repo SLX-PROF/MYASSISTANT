@@ -32,7 +32,7 @@ from app.scheduler import ReminderScheduler
 from app.security import LoginRateLimiter, SecurityMiddleware
 from app.tools.builtin import build_registry
 
-log = logging.getLogger("jarvis")
+log = logging.getLogger("atlas")
 
 WEB_DIR = Path(__file__).parent / "web"
 
@@ -111,7 +111,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             bot = TelegramBot(telegram, settings, db, CommandHandler(db, monitor, regular, st.agent))
             bot.start()
         log.info(
-            "Jarvis started (llm=%s, model=%s, tz=%s, telegram=%s, monitoring=%s)",
+            "Atlas started (llm=%s, model=%s, tz=%s, telegram=%s, monitoring=%s)",
             llm.name,
             llm.model,
             settings.timezone,
@@ -131,7 +131,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             await llm.aclose()
             await db.dispose()
 
-    app = FastAPI(title="Jarvis", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Atlas", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(SecurityMiddleware, settings=settings)
 
     for r in (auth.router, chat.router, items.router, notifications.router):

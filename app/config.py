@@ -49,7 +49,7 @@ class Settings(BaseSettings):
 
     # --- Assistant -------------------------------------------------------
     timezone: str = "Europe/Moscow"
-    assistant_name: str = "Jarvis"
+    assistant_name: str = "Атлас"
     facts_max_chars: int = 2000
 
     # --- Scheduler -------------------------------------------------------
@@ -125,7 +125,7 @@ class Settings(BaseSettings):
 
     @property
     def database_path(self) -> Path:
-        return self.data_dir / "jarvis.db"
+        return self.data_dir / "atlas.db"
 
     @property
     def database_url(self) -> str:

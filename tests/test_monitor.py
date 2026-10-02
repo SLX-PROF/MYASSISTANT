@@ -30,7 +30,7 @@ class FakeMessenger:
         self.sent: list[str] = []
         self.fail_times = fail_times
 
-    async def send(self, text, title="Jarvis"):
+    async def send(self, text, title="Атлас"):
         if self.fail_times:
             self.fail_times -= 1
             raise RuntimeError("send failed")

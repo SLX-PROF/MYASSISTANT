@@ -2,7 +2,7 @@
 
 Usage:
     python scripts/hash_password.py
-    docker compose run --rm jarvis python scripts/hash_password.py
+    docker compose run --rm atlas python scripts/hash_password.py
 """
 
 from __future__ import annotations

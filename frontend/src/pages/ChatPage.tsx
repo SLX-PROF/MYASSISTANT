@@ -71,8 +71,8 @@ export function ChatPage({ conversationId, onOrbState }: { conversationId: numbe
       const cid = (e as CustomEvent<number>).detail;
       if (cid === conversationId && !busyRef.current) load(cid);
     };
-    window.addEventListener("jarvis:conversation-updated", h);
-    return () => window.removeEventListener("jarvis:conversation-updated", h);
+    window.addEventListener("atlas:conversation-updated", h);
+    return () => window.removeEventListener("atlas:conversation-updated", h);
   }, [conversationId, load]);
   // Fired reminders arriving live.
   useEffect(
@@ -206,7 +206,7 @@ export function ChatPage({ conversationId, onOrbState }: { conversationId: numbe
           <Orb size={96} state={orbState} />
           <h2>Чем могу помочь?</h2>
           <p>
-            {me?.assistant_name ?? "Jarvis"} поставит напоминание, заведёт задачу или запомнит важное. Например: «Напомни через 2 минуты выпить воды».
+            {me?.assistant_name ?? "Атлас"} поставит напоминание, заведёт задачу или запомнит важное. Например: «Напомни через 2 минуты выпить воды».
           </p>
         </div>
       ) : (

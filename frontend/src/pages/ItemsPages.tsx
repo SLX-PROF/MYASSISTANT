@@ -334,7 +334,7 @@ export function MemoryPage() {
         <div className="page-header sr-only">
           <h2>Память</h2>
         </div>
-        <p className="hint">Эти факты Jarvis учитывает в каждом разговоре. Удалите всё, что больше не актуально.</p>
+        <p className="hint">Эти факты Атлас учитывает в каждом разговоре. Удалите всё, что больше не актуально.</p>
         <form className="surface add-form" onSubmit={add}>
           <label className="sr-only" htmlFor="fact-text">
             Новый факт

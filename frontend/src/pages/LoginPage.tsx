@@ -40,7 +40,7 @@ export function LoginPage() {
       <main className="login">
         <div className="login-card">
           <Orb state={state} />
-          <h1>{(me?.assistant_name ?? "Jarvis").toUpperCase()}</h1>
+          <h1>{(me?.assistant_name ?? "Атлас").toUpperCase()}</h1>
           <p className="hint">Личный ассистент. Войдите, чтобы продолжить.</p>
           <form onSubmit={submit}>
             <label htmlFor="password" className="sr-only">

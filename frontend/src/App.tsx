@@ -72,10 +72,10 @@ export function App() {
         setTimezone(m.timezone);
         setMe(m);
       })
-      .catch(() => setMe({ authenticated: false, assistant_name: "Jarvis" }));
-    const onUnauthorized = () => setMe({ authenticated: false, assistant_name: "Jarvis" });
-    window.addEventListener("jarvis:unauthorized", onUnauthorized);
-    return () => window.removeEventListener("jarvis:unauthorized", onUnauthorized);
+      .catch(() => setMe({ authenticated: false, assistant_name: "Атлас" }));
+    const onUnauthorized = () => setMe({ authenticated: false, assistant_name: "Атлас" });
+    window.addEventListener("atlas:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("atlas:unauthorized", onUnauthorized);
   }, [setMe]);
 
   // After login: settings, conversations, live events.
@@ -104,7 +104,7 @@ export function App() {
         }
       } else if (ev.type === "conversation_updated") {
         refreshConversations();
-        window.dispatchEvent(new CustomEvent("jarvis:conversation-updated", { detail: ev.conversation_id }));
+        window.dispatchEvent(new CustomEvent("atlas:conversation-updated", { detail: ev.conversation_id }));
       } else if (ev.type === "notifications_read") {
         refreshConversations();
       }
@@ -114,8 +114,8 @@ export function App() {
 
   // Open the latest conversation on "/" once they are loaded.
   useEffect(() => {
-    if (route.name === "chat" && route.id === null && location.pathname === "/" && conversations.length && !sessionStorage.getItem("jarvis.fresh")) {
-      sessionStorage.setItem("jarvis.fresh", "1");
+    if (route.name === "chat" && route.id === null && location.pathname === "/" && conversations.length && !sessionStorage.getItem("atlas.fresh")) {
+      sessionStorage.setItem("atlas.fresh", "1");
       navigate({ name: "chat", id: conversations[0].id }, true);
     }
   }, [route, conversations, navigate]);
@@ -125,7 +125,7 @@ export function App() {
     const unread = conversations.reduce((n, c) => n + c.unread, 0);
     const nav = navigator as Navigator & { setAppBadge?: (n: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
     (unread ? nav.setAppBadge?.(unread) : nav.clearAppBadge?.())?.catch(() => undefined);
-    document.title = unread ? `(${unread}) Jarvis` : "Jarvis";
+    document.title = unread ? `(${unread}) Атлас` : "Атлас";
   }, [conversations]);
 
   if (route.name === "showcase") {

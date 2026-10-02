@@ -47,7 +47,7 @@ export function SettingsPage() {
     try {
       await api.logout();
     } finally {
-      setMe({ authenticated: false, assistant_name: me?.assistant_name ?? "Jarvis" });
+      setMe({ authenticated: false, assistant_name: me?.assistant_name ?? "Атлас" });
       navigate({ name: "chat", id: null }, true);
     }
   };
@@ -124,7 +124,7 @@ export function SettingsPage() {
             )}
           </div>
           <p className="hint">
-            На iPhone: откройте Jarvis в Safari → «Поделиться» → «На экран Домой». Уведомления о напоминаниях приходят, пока открыта вкладка или приложение.
+            На iPhone: откройте Атлас в Safari → «Поделиться» → «На экран Домой». Уведомления о напоминаниях приходят, пока открыта вкладка или приложение.
           </p>
         </section>
 

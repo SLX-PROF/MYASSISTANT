@@ -88,7 +88,7 @@ export function MessageList({ messages, draft, orbState }: Props) {
           </div>
         ) : (
           draft.tools.every((t) => t.state !== "run") && (
-            <div className="bubble bot typing" role="status" aria-label="Jarvis печатает">
+            <div className="bubble bot typing" role="status" aria-label="Атлас печатает">
               <span />
               <span />
               <span />

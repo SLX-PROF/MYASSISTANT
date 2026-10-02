@@ -1,10 +1,10 @@
 """Consistent online backup of the SQLite database (safe while the app runs).
 
-Jarvis also does this automatically every night at 04:15.
+Atlas also does this automatically every night at 04:15.
 
 Usage (Docker):
-    docker compose exec jarvis python scripts/backup_db.py
-    docker compose cp jarvis:/data/backups ./backups
+    docker compose exec atlas python scripts/backup_db.py
+    docker compose cp atlas:/data/backups ./backups
 """
 
 from __future__ import annotations

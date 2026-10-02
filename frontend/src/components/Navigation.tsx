@@ -20,7 +20,7 @@ export function Sidebar() {
     <nav className={`sidebar ${sidebarOpen ? "open" : ""}`} aria-label="Навигация">
       <div className="brand">
         <Orb small size={28} />
-        JARVIS
+        АТЛАС
       </div>
       <button type="button" className="btn btn-primary" onClick={() => navigate({ name: "chat", id: null })}>
         <Plus size={16} aria-hidden="true" /> Новый чат

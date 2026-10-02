@@ -22,7 +22,7 @@ from starlette.responses import JSONResponse
 from app.config import Settings
 from app.db.models import AuthSession, utcnow
 
-SESSION_COOKIE = "jarvis_session"
+SESSION_COOKIE = "atlas_session"
 CSRF_HEADER = "x-csrf-token"
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 

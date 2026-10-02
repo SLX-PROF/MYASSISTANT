@@ -18,8 +18,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DATA_DIR=/data
 
 WORKDIR /app
-RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin jarvis \
-    && mkdir -p /data && chown jarvis:jarvis /data
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin atlas \
+    && mkdir -p /data && chown atlas:atlas /data
 
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
@@ -30,7 +30,7 @@ COPY scripts ./scripts
 COPY app ./app
 COPY --from=web /src/app/web ./app/web
 
-USER jarvis
+USER atlas
 VOLUME ["/data"]
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

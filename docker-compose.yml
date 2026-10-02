@@ -1,15 +1,15 @@
 services:
-  jarvis:
+  atlas:
     build: .
-    image: jarvis:latest
-    container_name: jarvis
+    image: atlas:latest
+    container_name: atlas
     restart: unless-stopped
     # Loopback only by default. To expose, put a reverse proxy with HTTPS in front
-    # (see docs/DEPLOY.md) - or, knowingly, set JARVIS_BIND=0.0.0.0 in .env.
+    # (see docs/DEPLOY.md) - or, knowingly, set ATLAS_BIND=0.0.0.0 in .env.
     ports:
-      - "${JARVIS_BIND:-127.0.0.1}:${JARVIS_PORT:-8000}:8000"
+      - "${ATLAS_BIND:-127.0.0.1}:${ATLAS_PORT:-8000}:8000"
     volumes:
-      - jarvis-data:/data          # SQLite database (and future attachments)
+      - atlas-data:/data          # SQLite database (and future attachments)
       - ./.env:/app/.env:ro        # settings and secrets, read by the app
     environment:
       HOST: 0.0.0.0                # inside the container; host exposure is set by "ports"
@@ -31,4 +31,4 @@ services:
         max-file: "3"
 
 volumes:
-  jarvis-data:
+  atlas-data:

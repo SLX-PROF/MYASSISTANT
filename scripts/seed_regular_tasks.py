@@ -1,10 +1,10 @@
 """Create the regular-task schedule (docs/REGULAR_TASKS_SPEC.md). Idempotent:
 existing tasks keep their progress; only missing ones are added.
 
-Jarvis also runs this automatically at startup when SITE_BASE_URL is set.
+Atlas also runs this automatically at startup when SITE_BASE_URL is set.
 
 Usage:
-    docker compose exec jarvis python scripts/seed_regular_tasks.py
+    docker compose exec atlas python scripts/seed_regular_tasks.py
 """
 
 from __future__ import annotations

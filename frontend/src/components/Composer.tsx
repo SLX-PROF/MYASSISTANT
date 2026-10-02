@@ -95,7 +95,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ bu
             ref={area}
             rows={1}
             value={text}
-            placeholder={placeholder ?? "Сообщение для Jarvis…"}
+            placeholder={placeholder ?? "Сообщение для Атласа…"}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKeyDown}
             onFocus={() => setKeyboard(true)}

@@ -1,5 +1,5 @@
-/* Jarvis service worker: app-shell cache, offline screen, push-ready. */
-const VERSION = "jarvis-v1";
+/* Atlas service worker: app-shell cache, offline screen, push-ready. */
+const VERSION = "atlas-v1";
 const SHELL = ["/", "/offline.html", "/offline.css", "/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png", "/theme-init.js"];
 
 self.addEventListener("install", (event) => {
@@ -59,14 +59,14 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch (e) {
-    data = { title: "Jarvis", body: event.data ? event.data.text() : "" };
+    data = { title: "Атлас", body: event.data ? event.data.text() : "" };
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || "Jarvis", {
+    self.registration.showNotification(data.title || "Атлас", {
       body: data.body || "",
       icon: "/icons/icon-192.png",
       badge: "/icons/badge-96.png",
-      tag: data.url || "jarvis",
+      tag: data.url || "atlas",
       data: { url: data.url || "/" },
     }),
   );

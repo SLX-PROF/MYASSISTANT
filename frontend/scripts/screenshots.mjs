@@ -30,8 +30,8 @@ async function send(page, text) {
 
 async function theme(page, t) {
   await page.evaluate((t) => {
-    const ui = JSON.parse(localStorage.getItem("jarvis.ui") || "{}");
-    localStorage.setItem("jarvis.ui", JSON.stringify({ ...ui, theme: t }));
+    const ui = JSON.parse(localStorage.getItem("atlas.ui") || "{}");
+    localStorage.setItem("atlas.ui", JSON.stringify({ ...ui, theme: t }));
     document.documentElement.dataset.theme = t;
   }, t);
   await page.waitForTimeout(300);

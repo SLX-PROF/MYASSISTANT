@@ -29,7 +29,7 @@ class Messenger:
         self.telegram = telegram
         self.sent: list[str] = []  # recent messages (for tests and debugging)
 
-    async def send(self, text: str, title: str = "Jarvis") -> None:
+    async def send(self, text: str, title: str = "Атлас") -> None:
         self.sent = (self.sent + [text])[-50:]
         if self.telegram and self.settings.telegram_chat_ids:
             delivered = False

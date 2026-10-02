@@ -76,7 +76,7 @@ class MonitorService:
         )
         if self.settings.heartbeat_url:
             add_job(self.heartbeat, CronTrigger(hour=12, minute=7, timezone=tz), "heartbeat")
-        add_job(self.backup, CronTrigger(hour=4, minute=15, timezone=tz), "jarvis-backup")
+        add_job(self.backup, CronTrigger(hour=4, minute=15, timezone=tz), "atlas-backup")
 
     async def poll_minutely(self) -> None:
         await self.poll_leads()
@@ -323,7 +323,7 @@ class MonitorService:
             log.info("database backup written: %s", path.name)
         except Exception:  # noqa: BLE001
             log.exception("database backup failed")
-            await self.messenger.send("Предупреждение: не удалось сделать резервную копию базы Jarvis. См. логи.")
+            await self.messenger.send("Предупреждение: не удалось сделать резервную копию базы Атласа. См. логи.")
 
     async def budget_watch(self) -> None:
         """After each model call: one message at 70% and one at 100% per month."""

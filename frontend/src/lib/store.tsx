@@ -48,7 +48,7 @@ export function applyUi(ui: UISettings) {
   root.style.setProperty("--accent", ui.accent);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#f3f6fb" : "#04060c");
   try {
-    localStorage.setItem("jarvis.ui", JSON.stringify(ui));
+    localStorage.setItem("atlas.ui", JSON.stringify(ui));
   } catch {
     /* storage unavailable */
   }
@@ -56,7 +56,7 @@ export function applyUi(ui: UISettings) {
 
 function initialUi(): UISettings {
   try {
-    return { ...DEFAULT_UI, ...JSON.parse(localStorage.getItem("jarvis.ui") || "{}") };
+    return { ...DEFAULT_UI, ...JSON.parse(localStorage.getItem("atlas.ui") || "{}") };
   } catch {
     return DEFAULT_UI;
   }
