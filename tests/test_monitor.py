@@ -36,6 +36,9 @@ class FakeMessenger:
             raise RuntimeError("send failed")
         self.sent.append(text)
 
+    async def send_lead(self, text):
+        await self.send(text, title="Новая заявка")
+
 
 # --------------------------------------------------------------- thresholds
 
@@ -292,3 +295,45 @@ async def test_reports(db, settings):
     assert "Расход Claude API" in await svc.cost_report()
     summary = await svc.weekly_summary()
     assert "Сводка за неделю" in summary and "Заявок: 1" in summary
+
+
+# ------------------------------------------------------------- leads bot
+
+
+class _Tg:
+    def __init__(self, fail=False):
+        self.sent, self.fail = [], fail
+
+    async def send_message(self, chat_id, text):
+        from app.channels.telegram import TelegramError
+
+        if self.fail:
+            raise TelegramError("sendMessage: 403 Forbidden")
+        self.sent.append((chat_id, text))
+
+
+async def test_leads_go_to_separate_bot_and_fall_back(db, settings):
+    from pydantic import SecretStr
+
+    from app.events import EventBus
+    from app.monitor.messenger import Messenger
+
+    st = settings.model_copy(
+        update={
+            "telegram_bot_token": SecretStr("main"),
+            "telegram_allowed_chat_ids": "1",
+            "leads_telegram_bot_token": SecretStr("leads"),
+            "leads_telegram_chat_ids": "2, 3",
+        }
+    )
+    assert st.leads_bot_enabled and st.leads_chat_ids == {2, 3}
+    main, leads = _Tg(), _Tg()
+    m = Messenger(st, db, EventBus(), main, leads)
+    await m.send_lead("Новая заявка №1")
+    await m.send("Тревога: диск")
+    assert sorted(leads.sent) == [(2, "Новая заявка №1"), (3, "Новая заявка №1")]
+    assert main.sent == [(1, "Тревога: диск")]  # alerts stay in the main bot
+
+    broken = Messenger(st, db, EventBus(), main, _Tg(fail=True))
+    await broken.send_lead("Новая заявка №2")
+    assert main.sent[-1] == (1, "Новая заявка №2")  # never lost

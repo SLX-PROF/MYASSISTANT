@@ -128,7 +128,7 @@ class MonitorService:
             pending = (await s.scalars(select(Lead).where(Lead.notified.is_(False)).order_by(Lead.id))).all()
         sent = 0
         for lead in pending:
-            await self.messenger.send(self.lead_text(lead), title="Новая заявка")
+            await self.messenger.send_lead(self.lead_text(lead))
             async with self.db.session() as s:
                 row = await s.get(Lead, lead.id)
                 row.notified = True

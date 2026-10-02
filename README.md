@@ -73,6 +73,8 @@ docker compose up -d
 
 Команды бота: `/status`, `/leads`, `/cost`, `/mute 2h` (с подтверждением `/yes`), `/due`, `/how <ключ>`, `/done <ключ>`, `/snooze <ключ> 3d`, `/lastdone`, `/help`. Любой другой текст — обычный разговор с Атлас: «напомни…», «добавь задачу…», «что с сайтом?».
 
+Заявки можно отправлять в отдельного бота: `LEADS_TELEGRAM_BOT_TOKEN` и `LEADS_TELEGRAM_CHAT_IDS` (только уведомления о новых заявках; тревоги и всё остальное остаются в основном боте).
+
 Пока Telegram не настроен, все эти сообщения приходят в веб-интерфейс, в диалог «Сайт и сервер».
 
 Подробности: [`docs/MONITORING_SPEC.md`](docs/MONITORING_SPEC.md) и [`docs/REGULAR_TASKS_SPEC.md`](docs/REGULAR_TASKS_SPEC.md).

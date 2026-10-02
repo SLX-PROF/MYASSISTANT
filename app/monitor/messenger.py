@@ -22,11 +22,19 @@ WEB_CONVERSATION_TITLE = "Сайт и сервер"
 
 
 class Messenger:
-    def __init__(self, settings: Settings, db: Database, bus: EventBus, telegram: TelegramAPI | None):
+    def __init__(
+        self,
+        settings: Settings,
+        db: Database,
+        bus: EventBus,
+        telegram: TelegramAPI | None,
+        leads_telegram: TelegramAPI | None = None,
+    ):
         self.settings = settings
         self.db = db
         self.bus = bus
         self.telegram = telegram
+        self.leads_telegram = leads_telegram
         self.sent: list[str] = []  # recent messages (for tests and debugging)
 
     async def send(self, text: str, title: str = "Атлас") -> None:
@@ -42,6 +50,25 @@ class Messenger:
             if delivered:
                 return
         await self._to_web(text, title)
+
+    async def send_lead(self, text: str) -> None:
+        """New site leads go to the separate leads bot when it is configured.
+
+        If that bot cannot deliver to anyone, fall back to the normal route
+        so a lead is never lost.
+        """
+        if self.leads_telegram and self.settings.leads_chat_ids:
+            delivered = False
+            for chat in self.settings.leads_chat_ids:
+                try:
+                    await self.leads_telegram.send_message(chat, text)
+                    delivered = True
+                except TelegramError as e:
+                    log.warning("leads bot send failed: %s", e)
+            if delivered:
+                self.sent = (self.sent + [text])[-50:]
+                return
+        await self.send(text, title="Новая заявка")
 
     async def _to_web(self, text: str, title: str) -> None:
         async with self.db.session() as s:

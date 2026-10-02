@@ -61,6 +61,11 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             if settings.telegram_enabled
             else None
         )
+        leads_telegram = (
+            TelegramAPI(settings.leads_telegram_bot_token.get_secret_value(), settings.telegram_api_base)
+            if settings.leads_bot_enabled
+            else None
+        )
         notifiers = [WebNotifier(bus)]
         if telegram:
             notifiers.append(TelegramNotifier(telegram, settings.telegram_chat_ids))
@@ -77,7 +82,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
                 llm = FakeProvider(tz=settings.tz)
 
         # Site duty, regular tasks, Telegram
-        messenger = Messenger(settings, db, bus, telegram)
+        messenger = Messenger(settings, db, bus, telegram, leads_telegram)
         explainer = Explainer(db, settings, llm) if not isinstance(llm, FakeProvider) else None
         alerts = AlertManager(db, messenger, explainer)
         regular = RegularTasks(db, settings)
@@ -111,12 +116,13 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             bot = TelegramBot(telegram, settings, db, CommandHandler(db, monitor, regular, st.agent))
             bot.start()
         log.info(
-            "Atlas started (llm=%s, model=%s, tz=%s, telegram=%s, monitoring=%s)",
+            "Atlas started (llm=%s, model=%s, tz=%s, telegram=%s, monitoring=%s, leads bot=%s)",
             llm.name,
             llm.model,
             settings.timezone,
             "on" if telegram else "off",
             "on" if site else "off",
+            "on" if leads_telegram else "off",
         )
         try:
             yield
@@ -128,6 +134,8 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
                 await site.aclose()
             if telegram:
                 await telegram.aclose()
+            if leads_telegram:
+                await leads_telegram.aclose()
             await llm.aclose()
             await db.dispose()
 

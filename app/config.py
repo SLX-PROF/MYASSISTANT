@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_allowed_chat_ids: str = ""  # comma separated numeric chat ids
     telegram_api_base: str = "https://api.telegram.org"
+    # Optional second bot that only delivers new site leads (send-only, no commands).
+    # Empty = leads go through the main bot like everything else.
+    leads_telegram_bot_token: SecretStr = SecretStr("")
+    leads_telegram_chat_ids: str = ""  # comma separated; may include people without access to the assistant
 
     # --- Site monitoring (empty SITE_BASE_URL = monitoring off) ------------
     site_base_url: str = ""
@@ -133,12 +137,15 @@ class Settings(BaseSettings):
 
     @property
     def telegram_chat_ids(self) -> set[int]:
-        out = set()
-        for part in self.telegram_allowed_chat_ids.split(","):
-            part = part.strip()
-            if part.lstrip("-").isdigit():
-                out.add(int(part))
-        return out
+        return _chat_ids(self.telegram_allowed_chat_ids)
+
+    @property
+    def leads_chat_ids(self) -> set[int]:
+        return _chat_ids(self.leads_telegram_chat_ids)
+
+    @property
+    def leads_bot_enabled(self) -> bool:
+        return bool(self.leads_telegram_bot_token.get_secret_value() and self.leads_chat_ids)
 
     @property
     def telegram_enabled(self) -> bool:
@@ -155,6 +162,15 @@ class Settings(BaseSettings):
     @property
     def extra_origins(self) -> set[str]:
         return {o.strip().rstrip("/") for o in self.allowed_origins.split(",") if o.strip()}
+
+
+def _chat_ids(raw: str) -> set[int]:
+    out = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if part.lstrip("-").isdigit():
+            out.add(int(part))
+    return out
 
 
 @lru_cache
