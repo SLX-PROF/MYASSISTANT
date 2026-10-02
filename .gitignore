@@ -21,3 +21,7 @@ app/web/
 .DS_Store
 *.log
 test-results/
+
+# server counters for the traffic monitor
+host/*
+!host/README

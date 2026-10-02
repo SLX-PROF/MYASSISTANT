@@ -115,7 +115,14 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
                 if settings.mail_llm_model and not isinstance(llm, FakeProvider):
                     mail_provider = create_provider(settings.model_copy(update={"llm_model": settings.mail_llm_model}))
                 mail_llm = None if isinstance(mail_provider, FakeProvider) else MailLLM(db, settings, mail_provider)
-                st_mail = {"inventory": MailInventory(db, settings, mail_llm), "digest": MailDigest(db, settings, mail_llm)}
+                from app.mail.oauth import MicrosoftAuth
+
+                ms_auth = MicrosoftAuth(settings.outlook_client_id, settings.data_dir / "secrets")
+                st_mail = {
+                    "inventory": MailInventory(db, settings, mail_llm, auth=ms_auth),
+                    "digest": MailDigest(db, settings, mail_llm, auth=ms_auth),
+                    "oauth": ms_auth,
+                }
                 log.info("mail: %s mailbox(es)", len(mail_accounts))
             except (MailError, LLMError) as e:
                 log.error("mail disabled: %s", e)
@@ -213,6 +220,11 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             "weekly-archive",
         )
         scheduler.add_job(host.check, IntervalTrigger(seconds=600), "host-check")
+        from app.monitor.traffic import TrafficMonitor
+
+        traffic = TrafficMonitor(db, settings, messenger)
+        st.traffic = traffic
+        scheduler.add_job(traffic.sample, IntervalTrigger(seconds=300), "traffic")
         scheduler.add_job(host.stamp, IntervalTrigger(seconds=60), "alive-stamp")
         await host.startup_notice()
         if settings.content_publish_remind_minutes:
@@ -238,7 +250,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
                 telegram,
                 settings,
                 db,
-                CommandHandler(db, monitor, regular, st.agent, mail=st_mail, include_work=work_in_main),
+                CommandHandler(db, monitor, regular, st.agent, mail=st_mail, include_work=work_in_main, traffic=traffic),
                 transcriber=transcriber,
                 note_saver=save_forward,
                 commands=MAIN_COMMANDS + (WORK_COMMANDS[:-1] if work_in_main else []),

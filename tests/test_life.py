@@ -265,3 +265,41 @@ async def test_weekly_archive(db, settings):
     for _ in range(3):
         backup.archive(settings.data_dir, keep=2)
     assert len(list((settings.data_dir / "backups" / "weekly").glob("*.tar.gz"))) == 2
+
+
+NET_DEV = """Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 9000 10 0 0 0 0 0 0 9000 10 0 0 0 0 0 0
+  ens3: {rx} 100 0 0 0 0 0 0 {tx} 100 0 0 0 0 0 0
+docker0: 99999999999 1 0 0 0 0 0 0 99999999999 1 0 0 0 0 0 0
+tailscale0: 5 1 0 0 0 0 0 0 5 1 0 0 0 0 0 0
+"""
+
+
+async def test_traffic_counts_across_reboot_and_warns(db, settings, tmp_path):
+    from app.monitor import traffic as tr
+
+    gbb = 1024**3
+    assert tr.pick_interface(tr.parse_net_dev(NET_DEV.format(rx=1, tx=2))) == "ens3"
+    assert tr.period_start(date(2026, 10, 3), 5) == date(2026, 9, 5)
+    assert tr.period_start(date(2026, 1, 3), 5) == date(2025, 12, 5)
+    f = tmp_path / "net_dev"
+    m = Msgr()
+    clock = {"now": datetime(2026, 10, 2, 9, 0, tzinfo=timezone.utc)}
+    st = settings.model_copy(update={"traffic_limit_gb": 100})
+    t = tr.TrafficMonitor(db, st, m, path=f, clock=lambda: clock["now"])
+    assert await t.sample() is None and "crontab" in m.sent[0]  # counter file missing: one hint
+    assert await t.sample() is None and len(m.sent) == 1
+    f.write_text(NET_DEV.format(rx=10 * gbb, tx=50 * gbb))
+    await t.sample()  # baseline
+    f.write_text(NET_DEV.format(rx=20 * gbb, tx=130 * gbb))
+    s1 = await t.sample()
+    assert s1["tx"] == 80 * gbb and "80%" in m.sent[-1]
+    f.write_text(NET_DEV.format(rx=gbb, tx=17 * gbb))  # reboot: counters restarted
+    s2 = await t.sample()
+    assert s2["tx"] == 97 * gbb and "95%" in m.sent[-1] and len(m.sent) == 3
+    assert "Исходящий: 97.0 ГБ" in await t.report() and "97%" in await t.report()
+    clock["now"] = datetime(2026, 11, 1, 9, 0, tzinfo=timezone.utc)  # new period
+    f.write_text(NET_DEV.format(rx=gbb, tx=18 * gbb))
+    s3 = await t.sample()
+    assert s3["period"] == "2026-11-01" and s3["tx"] == 0

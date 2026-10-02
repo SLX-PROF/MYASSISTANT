@@ -79,6 +79,9 @@ def parse_accounts(raw: str, hosts_override: str = "") -> list[Account]:
             continue
         address, sep, password = part.partition(":")
         address = address.strip().lower()
+        domain = address.split("@", 1)[1] if "@" in address else ""
+        if not sep and domain in ("outlook.com", "hotmail.com", "live.com", "msn.com"):
+            sep, password = ":", "oauth"  # Outlook signs in through Microsoft, no password
         if not sep or "@" not in address or not password.strip():
             raise MailError(f"MAIL_ACCOUNTS: ожидается адрес:пароль_приложения, а не «{address or part[:20]}»")
         domain = address.split("@", 1)[1]
@@ -101,7 +104,8 @@ class Folder:
 class Mailbox:
     """One IMAP connection. Use as a context manager inside a thread."""
 
-    def __init__(self, account: Account, timeout: int = 60, factory=imaplib.IMAP4_SSL):
+    def __init__(self, account: Account, timeout: int = 60, factory=imaplib.IMAP4_SSL, token: str | None = None):
+        self.token = token  # OAuth access token (Outlook); None = password login
         self.account = account
         self.timeout = timeout
         self.factory = factory
@@ -110,8 +114,14 @@ class Mailbox:
     def __enter__(self) -> Mailbox:
         try:
             self.conn = self.factory(self.account.host, 993, timeout=self.timeout)
-            self.conn.login(self.account.address, self.account.password)
+            if self.token:
+                auth = f"user={self.account.address}\x01auth=Bearer {self.token}\x01\x01".encode()
+                self.conn.authenticate("XOAUTH2", lambda _: auth)
+            else:
+                self.conn.login(self.account.address, self.account.password)
         except imaplib.IMAP4.error as e:
+            if self.token:
+                raise MailError(f"{self.account.address}: Outlook не принял вход — войдите через Microsoft заново.") from e
             raise MailError(
                 f"{self.account.address}: почта не пустила. Нужен пароль приложения и включённый IMAP в настройках ящика."
             ) from e

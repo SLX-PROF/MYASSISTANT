@@ -244,3 +244,69 @@ def test_mailbox_is_read_only_and_parses_server_answers():
     assert fetches and all("PEEK" in c[3] for c in fetches)
     # nothing that could change the mailbox was ever called
     assert not any(c[1] in ("STORE", "COPY", "MOVE", "EXPUNGE") for c in conn.calls if c[0] == "uid")
+
+
+async def test_outlook_device_login_and_token_refresh(tmp_path, monkeypatch):
+    import asyncio
+    import json as _json
+    import os
+
+    import httpx
+
+    from app.mail import oauth
+
+    calls = []
+    polls = {"n": 0}
+
+    def handler(request: httpx.Request):
+        form = dict(x.split("=", 1) for x in request.content.decode().split("&"))
+        calls.append((request.url.path.rsplit("/", 1)[-1], form.get("grant_type", "")))
+        if request.url.path.endswith("/devicecode"):
+            return httpx.Response(200, json={"device_code": "DEV", "user_code": "ABCD-EFGH", "verification_uri": "https://microsoft.com/devicelogin", "expires_in": 900, "interval": 0})
+        if "device_code" in form.get("grant_type", ""):
+            polls["n"] += 1
+            if polls["n"] == 1:
+                return httpx.Response(400, json={"error": "authorization_pending"})
+            return httpx.Response(200, json={"access_token": "AT1", "refresh_token": "RT1", "expires_in": 3600})
+        if form.get("grant_type") == "refresh_token":
+            return httpx.Response(200, json={"access_token": "AT2", "refresh_token": "RT2", "expires_in": 3600})
+        return httpx.Response(400, json={"error": "bad"})
+
+    monkeypatch.setattr(asyncio, "sleep", lambda s, _orig=asyncio.sleep: _orig(0))
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    auth = oauth.MicrosoftAuth("client-id", tmp_path / "secrets", client=client)
+    acc = parse_accounts("me@outlook.com")[0]
+    assert acc.password == "oauth" and oauth.needs_oauth(acc) and acc.host == "outlook.office365.com"
+    with pytest.raises(MailError, match="войти"):
+        await oauth.token_for(auth, acc)
+    p = await auth.start(acc.address)
+    assert p.user_code == "ABCD-EFGH" and auth.state(acc.address)["pending"]["user_code"] == "ABCD-EFGH"
+    await p.task
+    st = auth.state(acc.address)
+    assert st["connected"] and st["pending"] is None
+    secret = tmp_path / "secrets" / "oauth-me_at_outlook.com.json"
+    assert _json.loads(secret.read_text())["refresh_token"] == "RT1" and oct(os.stat(secret).st_mode)[-3:] == "600"
+    assert await oauth.token_for(auth, acc) == "AT1"  # cached from the login
+    auth._cache.clear()
+    assert await oauth.token_for(auth, acc) == "AT2"  # refreshed, refresh token rotated
+    assert _json.loads(secret.read_text())["refresh_token"] == "RT2"
+    assert await oauth.token_for(auth, parse_accounts("me@gmail.com:pw")[0]) is None
+    await client.aclose()
+
+
+def test_mailbox_xoauth2_login():
+    from app.mail.imap import Mailbox
+
+    conn = FakeConn()
+    seen = {}
+
+    def authenticate(mech, cb):
+        seen["mech"], seen["payload"] = mech, cb(b"")
+        return "OK", [b""]
+
+    conn.authenticate = authenticate
+    acc = parse_accounts("me@outlook.com")[0]
+    with Mailbox(acc, factory=lambda *a, **k: conn, token="AT"):
+        pass
+    assert seen == {"mech": "XOAUTH2", "payload": b"user=me@outlook.com\x01auth=Bearer AT\x01\x01"}
+    assert not any(c[0] == "login" for c in conn.calls)

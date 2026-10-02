@@ -24,6 +24,7 @@ from app.db.session import Database
 from app.mail import parse
 from app.mail.imap import Account, MailError, Mailbox, parse_accounts
 from app.mail.llm import MailLLM, MailLLMError, estimate_usd
+from app.mail.oauth import MicrosoftAuth, token_for
 from app.services import kv
 
 log = logging.getLogger(__name__)
@@ -135,7 +136,8 @@ def _key(d: datetime | None) -> float:
 
 
 class MailInventory:
-    def __init__(self, db: Database, settings: Settings, llm: MailLLM | None, mailbox_factory=Mailbox):
+    def __init__(self, db: Database, settings: Settings, llm: MailLLM | None, mailbox_factory=Mailbox, auth: MicrosoftAuth | None = None):
+        self.auth = auth
         self.db = db
         self.settings = settings
         self.llm = llm
@@ -183,8 +185,8 @@ class MailInventory:
 
     # --------------------------------------------------------- 1. collect
 
-    def _collect_account(self, account: Account, own: set[str], aggs: dict[str, Agg], counters: dict) -> None:
-        with self.mailbox_factory(account) as mb:
+    def _collect_account(self, account: Account, own: set[str], aggs: dict[str, Agg], counters: dict, token: str | None = None) -> None:
+        with self.mailbox_factory(account, token=token) as mb:
             for folder in mb.history_folders():
                 mb.select(folder)
                 uids = mb.uids("ALL")
@@ -209,7 +211,8 @@ class MailInventory:
         try:
             for acc in accounts:
                 await self._save(message=f"Читаю {acc.address}…")
-                work = asyncio.to_thread(self._collect_account, acc, own, aggs, counters)
+                token = await token_for(self.auth, acc)
+                work = asyncio.to_thread(self._collect_account, acc, own, aggs, counters, token)
                 task = asyncio.ensure_future(work)
                 while not task.done():
                     await asyncio.wait([task], timeout=3)

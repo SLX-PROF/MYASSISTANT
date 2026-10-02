@@ -126,6 +126,8 @@ class Settings(BaseSettings):
     mail_exclude: str = ""
     # Model for mail analysis; empty = LLM_MODEL.
     mail_llm_model: str = ""
+    # Outlook/Hotmail: Application (client) ID of your app registration at Microsoft.
+    outlook_client_id: str = ""
 
     # --- Server health and backups ------------------------------------------
     # Warn when free disk space or memory falls below these values.
@@ -137,6 +139,12 @@ class Settings(BaseSettings):
     backup_weekly_keep: int = 6
     # Also send the weekly archive to your Telegram (private chat with the bot).
     backup_to_telegram: bool = True
+    # Monthly traffic limit of the hosting plan, GB (0 = no warnings). Counted:
+    # "out" = outgoing only, "total" = in + out (see your plan's terms).
+    traffic_limit_gb: float = 0
+    traffic_direction: str = "out"
+    traffic_reset_day: int = 1  # day of month the hosting counter restarts
+    traffic_interface: str = ""  # empty = the busiest real network card
 
     # --- Site monitoring (empty SITE_BASE_URL = monitoring off) ------------
     site_base_url: str = ""
@@ -203,6 +211,13 @@ class Settings(BaseSettings):
     @classmethod
     def _empty_coord(cls, v):
         return None if isinstance(v, str) and not v.strip() else v
+
+    @field_validator("traffic_direction")
+    @classmethod
+    def _valid_direction(cls, v: str) -> str:
+        if v not in ("out", "total"):
+            raise ValueError("traffic_direction must be out or total")
+        return v
 
     @field_validator("voice_model")
     @classmethod

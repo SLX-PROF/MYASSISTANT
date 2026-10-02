@@ -11,9 +11,11 @@ services:
     volumes:
       - atlas-data:/data          # SQLite database (and future attachments)
       - ./.env:/app/.env:ro        # settings and secrets, read by the app
+      - ./host:/host:ro            # server counters written by cron (traffic)
     environment:
       HOST: 0.0.0.0                # inside the container; host exposure is set by "ports"
       DATA_DIR: /data
+      HF_HOME: /data/models/hf     # speech model download cache (the image is read-only)
       # Requests reach the app via Docker's proxy, so trust X-Forwarded-For from it.
       # Safe while the port is bound to 127.0.0.1 (only a local reverse proxy can connect).
       FORWARDED_ALLOW_IPS: "*"

@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import os
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -29,6 +30,10 @@ class Transcriber:
         self._lock = asyncio.Lock()
 
     def _load(self):
+        # The container's file system is read-only: the download cache of
+        # huggingface_hub (and its xet cache) must live on the data volume.
+        os.environ.setdefault("HF_HOME", str(self.models_dir / "hf"))
+        os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
         try:
             from faster_whisper import WhisperModel
         except ImportError as e:  # pragma: no cover - present in the Docker image

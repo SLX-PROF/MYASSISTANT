@@ -22,6 +22,7 @@ from app.db.session import Database
 from app.mail import parse
 from app.mail.imap import Account, MailError, Mailbox, parse_accounts
 from app.mail.llm import MailLLM, MailLLMError
+from app.mail.oauth import MicrosoftAuth, token_for
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +79,8 @@ def _imap_date(d: datetime) -> str:
 
 
 class MailDigest:
-    def __init__(self, db: Database, settings: Settings, llm: MailLLM | None, mailbox_factory=Mailbox):
+    def __init__(self, db: Database, settings: Settings, llm: MailLLM | None, mailbox_factory=Mailbox, auth: MicrosoftAuth | None = None):
+        self.auth = auth
         self.db = db
         self.settings = settings
         self.llm = llm
@@ -87,8 +89,8 @@ class MailDigest:
     def accounts(self) -> list[Account]:
         return parse_accounts(self.settings.mail_accounts.get_secret_value(), self.settings.mail_imap_hosts)
 
-    def _fetch_new(self, account: Account, state: dict | None, since: datetime) -> tuple[list[parse.Header], dict]:
-        with self.mailbox_factory(account) as mb:
+    def _fetch_new(self, account: Account, state: dict | None, since: datetime, token: str | None = None) -> tuple[list[parse.Header], dict]:
+        with self.mailbox_factory(account, token=token) as mb:
             validity = mb.select('"INBOX"')
             if state and state.get("uidvalidity") == validity:
                 last = int(state.get("last_uid", 0))
@@ -111,7 +113,8 @@ class MailDigest:
             async with self.db.session() as s:
                 state = await kv.get(s, STATE_KEY.format(acc.address))
             try:
-                headers, new_state = await asyncio.to_thread(self._fetch_new, acc, state, since)
+                token = await token_for(self.auth, acc)
+                headers, new_state = await asyncio.to_thread(self._fetch_new, acc, state, since, token)
             except MailError as e:
                 errors.append(str(e))
                 continue

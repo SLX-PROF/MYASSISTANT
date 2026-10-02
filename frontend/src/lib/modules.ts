@@ -164,7 +164,10 @@ export type MailProgress = {
   estimate_usd?: number;
   model?: string;
 };
-export type MailStatus = { enabled: false } | { enabled: true; accounts: string[]; busy: boolean; progress: MailProgress; categories: Record<string, string>; digest_time: string };
+export type MailBox = { address: string; oauth: boolean; connected?: boolean; pending?: { user_code: string; verification_uri: string } | null; error?: string };
+export type MailStatus =
+  | { enabled: false }
+  | { enabled: true; accounts: string[]; boxes: MailBox[]; busy: boolean; progress: MailProgress; categories: Record<string, string>; digest_time: string };
 export type MailService = {
   id: number;
   domain: string;
@@ -193,4 +196,5 @@ export const mailApi = {
   setStatus: (id: number, status: MailService["status"]) => request<MailService>("PATCH", `/api/mail/services/${id}`, { status }),
   unsubscribe: (id: number) => request<MailService>("POST", `/api/mail/services/${id}/unsubscribe`),
   digest: () => request<{ text: string }>("POST", "/api/mail/digest"),
+  outlookStart: (address: string) => request<{ user_code: string; verification_uri: string }>("POST", `/api/mail/oauth/${encodeURIComponent(address)}/start`),
 };

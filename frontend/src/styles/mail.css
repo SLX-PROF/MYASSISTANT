@@ -180,3 +180,14 @@
   font-size: var(--fs-sm);
   line-height: 1.5;
 }
+.mail-code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 1.15em;
+  letter-spacing: 1px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+}
+.mail-confirm a {
+  color: var(--accent);
+}

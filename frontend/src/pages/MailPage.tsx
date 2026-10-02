@@ -42,7 +42,7 @@ export function MailPage() {
     load();
   }, [load]);
 
-  const busy = st?.enabled && st.busy;
+  const busy = st?.enabled && (st.busy || st.boxes.some((b) => b.pending));
   useEffect(() => {
     if (!busy) return;
     const t = setInterval(load, 2500);
@@ -96,6 +96,34 @@ export function MailPage() {
               <span className="hint">{st.accounts.join(", ")}</span>
             </div>
           </div>
+          {st.boxes
+            .filter((b) => b.oauth)
+            .map((b) => (
+              <div key={b.address} className="mail-confirm">
+                {b.connected ? (
+                  <span>
+                    {b.address}: вход через Microsoft выполнен <Check size={14} aria-hidden="true" />
+                  </span>
+                ) : b.pending ? (
+                  <span>
+                    Откройте{" "}
+                    <a href={b.pending.verification_uri} target="_blank" rel="noreferrer noopener">
+                      {b.pending.verification_uri.replace("https://", "")}
+                    </a>{" "}
+                    и введите код <b className="mail-code">{b.pending.user_code}</b>. Войдите в {b.address} и разрешите доступ к почте. Страница обновится сама.
+                  </span>
+                ) : (
+                  <>
+                    <span>
+                      {b.address}: Outlook подключается через вход Microsoft.{b.error ? ` ${b.error}` : ""}
+                    </span>
+                    <button type="button" className="btn btn-primary" onClick={() => act(() => mailApi.outlookStart(b.address))}>
+                      Войти в Outlook
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
           {p.state === "idle" && (
             <>
               <p className="hint">Шаг 1 бесплатный: Атлас прочитает только заголовки всех писем (отправитель, тема, дата) и сгруппирует их по сервисам. В модель ничего не уходит.</p>

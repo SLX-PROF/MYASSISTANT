@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import select
 
 from app.db.models import Lead
 from app.monitor import checks

@@ -26,6 +26,7 @@ MAX_MUTE = timedelta(hours=24)
 HELP = """Команды Атласа:
 /mail — сводка почты прямо сейчас
 /cost — расход Claude API за месяц
+/traffic — трафик сервера Атласа за месяц
 /app — открыть Атлас как приложение
 /help — эта справка
 
@@ -45,7 +46,13 @@ WORK_HELP = """Команды по сайту Forbsa:
 
 Сюда же приходят новые заявки, тревоги по сайту и сводка за неделю."""
 
-MAIN_COMMANDS = [("mail", "Сводка почты"), ("cost", "Расход Claude за месяц"), ("app", "Открыть Атлас"), ("help", "Справка")]
+MAIN_COMMANDS = [
+    ("mail", "Сводка почты"),
+    ("cost", "Расход Claude за месяц"),
+    ("traffic", "Трафик сервера"),
+    ("app", "Открыть Атлас"),
+    ("help", "Справка"),
+]
 WORK_COMMANDS = [
     ("status", "Состояние сайта и сервера"),
     ("leads", "Последние заявки"),
@@ -68,6 +75,10 @@ def parse_duration(text: str) -> timedelta | None:
             unit, timedelta(days=n)
         )
     return total or None
+
+
+async def _const(text: str) -> str:
+    return text
 
 
 def split_command(text: str) -> tuple[str, str]:
@@ -162,8 +173,17 @@ class CommandHandler:
     work bot is not configured (include_work=True)."""
 
     def __init__(
-        self, db: Database, monitor: MonitorService, regular: RegularTasks, agent: Agent, clock=utcnow, mail=None, include_work: bool = True
+        self,
+        db: Database,
+        monitor: MonitorService,
+        regular: RegularTasks,
+        agent: Agent,
+        clock=utcnow,
+        mail=None,
+        include_work: bool = True,
+        traffic=None,
     ):
+        self.traffic = traffic
         self.mail = mail
         self.db = db
         self.monitor = monitor
@@ -182,6 +202,7 @@ class CommandHandler:
             "/cost": lambda c, a: self.monitor.cost_report(),
             "/app": self._app,
             "/mail": self._mail,
+            "/traffic": lambda c, a: self.traffic.report() if self.traffic else _const("Счётчик трафика не подключён."),
         }
         h = handlers.get(cmd)
         if h is not None:

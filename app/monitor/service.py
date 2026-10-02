@@ -260,9 +260,9 @@ class MonitorService:
             return "Заявок пока нет."
         tz = self.settings.tz
         out = ["Последние заявки:"]
-        for l in rows:
-            when = l.created_at.astimezone(tz).strftime("%d.%m %H:%M")
-            out.append(f"№{l.id} · {when} · {TYPE_RU.get(l.type, l.type)} · {SOURCE_RU.get(l.source, l.source)}")
+        for lead in rows:
+            when = lead.created_at.astimezone(tz).strftime("%d.%m %H:%M")
+            out.append(f"№{lead.id} · {when} · {TYPE_RU.get(lead.type, lead.type)} · {SOURCE_RU.get(lead.source, lead.source)}")
         return "\n".join(out)
 
     async def cost_report(self) -> str:

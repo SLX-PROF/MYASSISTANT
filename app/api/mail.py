@@ -31,9 +31,19 @@ async def status(request: Request):
         return {"enabled": False}
     inv = m["inventory"]
     progress = await inv.load_state()
+    from app.mail.oauth import needs_oauth
+
+    auth = m["oauth"]
+    boxes = []
+    for a in inv.accounts():
+        box = {"address": a.address, "oauth": needs_oauth(a)}
+        if box["oauth"]:
+            box.update(auth.state(a.address))
+        boxes.append(box)
     return {
         "enabled": True,
         "accounts": [a.address for a in inv.accounts()],
+        "boxes": boxes,
         "busy": inv.busy,
         "progress": progress,
         "categories": CATEGORIES,
@@ -109,3 +119,22 @@ async def digest_now(request: Request):
     letters, _states, errors = await m["digest"].collect(utcnow())
     text = await m["digest"].render(letters, errors)
     return {"text": text or "Новых писем нет."}
+
+
+@router.post("/oauth/{address}/start")
+async def oauth_start(address: str, request: Request):
+    """Outlook: start «sign in with Microsoft» and return the code to enter."""
+    m = _mail(request)
+    if address.lower() not in {a.address for a in m["inventory"].accounts()}:
+        raise HTTPException(404, "Нет такого ящика в MAIL_ACCOUNTS")
+    try:
+        p = await m["oauth"].start(address.lower())
+    except MailError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"user_code": p.user_code, "verification_uri": p.verification_uri}
+
+
+@router.delete("/oauth/{address}")
+async def oauth_forget(address: str, request: Request):
+    _mail(request)["oauth"].forget(address.lower())
+    return {"ok": True}

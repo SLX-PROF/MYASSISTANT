@@ -181,6 +181,17 @@ sudo systemctl reload caddy
    - **«Разобрать»** — показывает цену заранее и после подтверждения отдаёт модели сжатый список сервисов.
 4. Сводка новых писем приходит каждый день в `MAIL_DIGEST_TIME`. В боте её можно получить командой `/mail`.
 
+**Outlook / Hotmail.** Microsoft не пускает почтовые программы по паролю, поэтому Outlook подключается через вход Microsoft. Один раз нужно зарегистрировать приложение:
+
+1. Откройте portal.azure.com под тем же аккаунтом Microsoft. Найдите в поиске **App registrations** (Регистрация приложений) и нажмите **New registration**.
+2. Name: `Atlas`. Supported account types: **Personal Microsoft accounts only**. Redirect URI оставьте пустым. Нажмите **Register**.
+3. На странице приложения скопируйте **Application (client) ID**.
+4. Слева откройте **Authentication** и внизу включите **Allow public client flows** → **Yes**, затем **Save**.
+5. В `.env` впишите `OUTLOOK_CLIENT_ID=скопированный_ID`, а в `MAIL_ACCOUNTS` добавьте адрес **без пароля**, например `MAIL_ACCOUNTS=me@gmail.com:пароль,me@outlook.com`. Затем `docker compose up -d --force-recreate`.
+6. В Атласе откройте **Почта**, нажмите **«Войти в Outlook»**, перейдите по ссылке, введите код, войдите и разрешите доступ.
+
+Ключ входа хранится в `/data/secrets` и в еженедельный архив не попадает.
+
 Банки и госуслуги можно скрыть от модели: `MAIL_EXCLUDE=sberbank.ru,tbank.ru,gosuslugi.ru`.
 
 ## 6. Резервные копии
@@ -211,7 +222,21 @@ docker compose exec atlas python scripts/backup_db.py
 
 Забрать копии на свой компьютер: `scp -r atlas@IP:/var/lib/docker/volumes/atlas_atlas-data/_data/backups ./` (нужен sudo на сервере). Проще так: `docker compose cp atlas:/data/backups ./backups` на сервере, затем `scp`.
 
-## 6а. Если сервер упал
+## 6а. Трафик
+
+Атлас может предупреждать, когда исходящий трафик сервера приближается к лимиту тарифа: при 80%, 95% и 100%. Команда `/traffic` в основном боте показывает расход с начала периода и прогноз.
+
+Контейнер не видит сетевые счётчики сервера, поэтому их раз в 5 минут копирует cron:
+```bash
+crontab -e
+```
+Добавьте строку (путь — папка Атласа):
+```
+*/5 * * * * cat /proc/net/dev > /home/atlas/atlas/host/net_dev
+```
+В `.env` укажите лимит тарифа в ГБ: `TRAFFIC_LIMIT_GB=1000`. Если хостинг считает входящий и исходящий вместе, добавьте `TRAFFIC_DIRECTION=total`. Если счётчик у хостинга обнуляется не 1-го числа, укажите день: `TRAFFIC_RESET_DAY=15`. Затем выполните `docker compose up -d --force-recreate`.
+
+## 6б. Если сервер упал
 
 Сам себя упавший сервер предупредить не может, поэтому защита двухслойная:
 
