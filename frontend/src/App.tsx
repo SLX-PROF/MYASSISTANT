@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Menu, PanelRight, Search, WifiOff, X } from "lucide-react";
 import { api, setCsrf } from "./lib/api";
+import { inTelegram, onTelegram, tg, tgInitData } from "./lib/telegram";
 import { setTimezone } from "./lib/format";
 import { useStore } from "./lib/store";
 import type { LiveEvent } from "./lib/types";
@@ -65,14 +66,20 @@ export function App() {
 
   // Session bootstrap.
   useEffect(() => {
-    api
-      .me()
-      .then((m) => {
-        setCsrf(m.csrf_token);
-        setTimezone(m.timezone);
-        setMe(m);
-      })
-      .catch(() => setMe({ authenticated: false, assistant_name: "Атлас" }));
+    (async () => {
+      let m = await api.me();
+      if (!m.authenticated && tgInitData) {
+        // Opened from the Telegram bot: Telegram vouches for the account.
+        try {
+          m = { ...(await api.telegramLogin(tgInitData)), authenticated: true };
+        } catch {
+          /* not allowed or stale launch data: show the password form */
+        }
+      }
+      setCsrf(m.csrf_token);
+      setTimezone(m.timezone);
+      setMe(m);
+    })().catch(() => setMe({ authenticated: false, assistant_name: "Атлас" }));
     const onUnauthorized = () => setMe({ authenticated: false, assistant_name: "Атлас" });
     window.addEventListener("atlas:unauthorized", onUnauthorized);
     return () => window.removeEventListener("atlas:unauthorized", onUnauthorized);
@@ -111,6 +118,13 @@ export function App() {
     };
     return () => es.close();
   }, [me?.authenticated, setUi, refreshConversations, emitLiveMessage, bumpItems, toast, navigate]);
+
+  // Telegram's own Back button on inner pages.
+  useEffect(() => {
+    if (!inTelegram) return;
+    tg.backButton(route.name !== "chat");
+    return onTelegram("back_button_pressed", () => navigate({ name: "chat", id: null }));
+  }, [route.name, navigate]);
 
   // Open the latest conversation on "/" once they are loaded.
   useEffect(() => {

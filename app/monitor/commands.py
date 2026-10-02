@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import select
 
+from app.channels.telegram import BotReply
 from app.core.agent import Agent
 from app.db.models import Conversation, utcnow
 from app.db.session import Database
@@ -32,6 +33,7 @@ HELP = """Команды Атласа:
 /done <ключ> — отметить задачу выполненной
 /snooze <ключ> 3d — отложить (не больше 14 дней)
 /lastdone — когда задачи выполнялись последний раз
+/app — открыть Атлас как приложение
 /help — эта справка
 
 Любой другой текст — вопрос Атласу: напоминания, задачи, вопросы о состоянии сайта."""
@@ -60,7 +62,7 @@ class CommandHandler:
         self.clock = clock
         self._pending: dict[int, tuple[str, datetime, datetime | None]] = {}  # chat -> (action, expires, arg)
 
-    async def __call__(self, chat_id: int, text: str) -> str | None:
+    async def __call__(self, chat_id: int, text: str) -> str | BotReply | None:
         text = text.strip()
         if not text.startswith("/"):
             return await self._ask_agent(text)
@@ -80,6 +82,7 @@ class CommandHandler:
             "/done": self._done,
             "/snooze": self._snooze,
             "/lastdone": lambda c, a: self.regular.lastdone_report(),
+            "/app": self._app,
         }
         h = handlers.get(cmd)
         if h is None:
@@ -88,6 +91,12 @@ class CommandHandler:
 
     async def _help(self, chat_id: int, arg: str) -> str:
         return HELP
+
+    async def _app(self, chat_id: int, arg: str) -> str | BotReply:
+        url = self.monitor.settings.miniapp_url
+        if not url:
+            return "Приложение не настроено: впишите TELEGRAM_MINIAPP_URL в .env (адрес Атласа в Tailscale)."
+        return BotReply("Атлас открывается внутри Telegram. Tailscale на устройстве должен быть включён.", ("Открыть Атлас", url))
 
     # ------------------------------------------------------------- mute
 

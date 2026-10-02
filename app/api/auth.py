@@ -16,6 +16,7 @@ from app.security import (
     require_session,
     set_session_cookie,
     verify_password,
+    verify_telegram_init_data,
     verify_totp,
 )
 
@@ -65,6 +66,41 @@ async def login(body: LoginIn, request: Request, response: Response):
     token, sess = await create_session(request, settings)
     set_session_cookie(response, token, settings)
     log.info("login ok from %s", ip)
+    return {"csrf_token": sess.csrf_token, **_app_info(request)}
+
+
+class TelegramLoginIn(BaseModel):
+    init_data: str = Field(min_length=1, max_length=8192)
+
+
+@router.post("/telegram")
+async def telegram_login(body: TelegramLoginIn, request: Request, response: Response):
+    """Sign-in inside the Telegram Mini App: Telegram vouches for the user's account.
+
+    Only chat ids from TELEGRAM_ALLOWED_CHAT_IDS are accepted.
+    """
+    settings = request.app.state.settings
+    if not settings.miniapp_url:
+        raise HTTPException(status_code=404, detail="Вход через Telegram не настроен")
+    limiter = request.app.state.login_limiter
+    ip = client_ip(request)
+    wait = limiter.retry_after(ip)
+    if wait:
+        raise HTTPException(status_code=429, detail="Слишком много попыток. Попробуйте позже.", headers={"Retry-After": str(wait)})
+    try:
+        user = verify_telegram_init_data(body.init_data, settings.telegram_bot_token.get_secret_value())
+    except ValueError as e:
+        limiter.record_failure(ip)
+        log.warning("telegram login rejected (%s) from %s", e, ip)
+        raise HTTPException(status_code=401, detail="Откройте Атлас заново из бота.") from None
+    if user["id"] not in settings.telegram_chat_ids:
+        limiter.record_failure(ip)
+        log.warning("telegram login: user not allowed")
+        raise HTTPException(status_code=403, detail="Нет доступа.")
+    limiter.reset(ip)
+    token, sess = await create_session(request, settings)
+    set_session_cookie(response, token, settings)
+    log.info("telegram login ok")
     return {"csrf_token": sess.csrf_token, **_app_info(request)}
 
 

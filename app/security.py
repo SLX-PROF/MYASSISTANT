@@ -5,12 +5,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import secrets
 import struct
 import time
 from collections import deque
 from datetime import timedelta
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -61,6 +62,39 @@ def verify_totp(secret_b32: str, code: str, for_time: float | None = None, windo
         return False
     now = time.time() if for_time is None else for_time
     return any(hmac.compare_digest(totp_code(secret_b32, now + i * 30), code) for i in range(-window, window + 1))
+
+
+# --------------------------------------------------------- Telegram Mini App
+
+TELEGRAM_INIT_MAX_AGE = 24 * 3600
+
+
+def verify_telegram_init_data(init_data: str, bot_token: str, now: float | None = None, max_age: int = TELEGRAM_INIT_MAX_AGE) -> dict:
+    """Check the signed launch data Telegram passes to a Mini App; returns the user.
+
+    https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+    """
+    try:
+        data = dict(parse_qsl(init_data, keep_blank_values=True, strict_parsing=True))
+    except ValueError:
+        raise ValueError("bad format") from None
+    received = data.pop("hash", "")
+    if not received or not bot_token:
+        raise ValueError("no hash")
+    check = "\n".join(f"{k}={v}" for k, v in sorted(data.items()))
+    secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    expected = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, received):
+        raise ValueError("bad signature")
+    if (time.time() if now is None else now) - int(data.get("auth_date", "0") or 0) > max_age:
+        raise ValueError("expired")
+    try:
+        user = json.loads(data.get("user", "{}"))
+    except ValueError:
+        raise ValueError("bad user") from None
+    if not isinstance(user, dict) or not isinstance(user.get("id"), int):
+        raise ValueError("no user")
+    return user
 
 
 def _token_hash(token: str) -> str:

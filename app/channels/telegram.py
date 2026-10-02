@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import httpx
 
@@ -45,9 +46,16 @@ class TelegramAPI:
             raise TelegramError(f"{method}: {data.get('error_code')} {data.get('description', '')}")
         return data.get("result")
 
-    async def send_message(self, chat_id: int, text: str) -> None:
-        for i in range(0, max(len(text), 1), MAX_LEN):
-            await self.call("sendMessage", chat_id=chat_id, text=text[i : i + MAX_LEN], disable_web_page_preview=True)
+    async def send_message(self, chat_id: int, text: str, reply_markup: dict | None = None) -> None:
+        chunks = [text[i : i + MAX_LEN] for i in range(0, max(len(text), 1), MAX_LEN)]
+        for i, chunk in enumerate(chunks):
+            extra = {"reply_markup": reply_markup} if reply_markup and i == len(chunks) - 1 else {}
+            await self.call("sendMessage", chat_id=chat_id, text=chunk, disable_web_page_preview=True, **extra)
+
+    async def set_menu_button(self, chat_id: int, text: str, url: str) -> None:
+        await self.call(
+            "setChatMenuButton", chat_id=chat_id, menu_button={"type": "web_app", "text": text, "web_app": {"url": url}}
+        )
 
     async def get_updates(self, offset: int, timeout: int = 50) -> list[dict]:
         res = await self.call("getUpdates", offset=offset, timeout=timeout, allowed_updates=["message"])
@@ -57,7 +65,21 @@ class TelegramAPI:
         await self.client.aclose()
 
 
-Handler = Callable[[int, str], Awaitable[str | None]]
+@dataclass
+class BotReply:
+    """A reply with an optional button that opens the Mini App."""
+
+    text: str
+    web_app: tuple[str, str] | None = None  # (button label, url)
+
+    def markup(self) -> dict | None:
+        if not self.web_app:
+            return None
+        label, url = self.web_app
+        return {"inline_keyboard": [[{"text": label, "web_app": {"url": url}}]]}
+
+
+Handler = Callable[[int, str], Awaitable[str | BotReply | None]]
 
 
 class TelegramBot:
@@ -67,6 +89,7 @@ class TelegramBot:
 
     def __init__(self, api: TelegramAPI, settings: Settings, db: Database, handler: Handler):
         self.api = api
+        self.settings = settings
         self.allowed = settings.telegram_chat_ids
         self.db = db
         self.handler = handler
@@ -83,7 +106,18 @@ class TelegramBot:
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
 
+    async def _setup_menu(self) -> None:
+        """The button next to the input field opens Atlas as a Mini App."""
+        if not self.settings.miniapp_url:
+            return
+        for chat in self.allowed:
+            try:
+                await self.api.set_menu_button(chat, "Атлас", self.settings.miniapp_url)
+            except TelegramError as e:
+                log.warning("telegram menu button: %s", e)
+
     async def _run(self) -> None:
+        await self._setup_menu()
         async with self.db.session() as s:
             offset = int(await kv.get(s, self.OFFSET_KEY, 0) or 0)
         backoff = 5
@@ -120,9 +154,15 @@ class TelegramBot:
         except Exception:  # noqa: BLE001
             log.exception("telegram handler failed")
             reply = "Внутренняя ошибка. Подробности в логах сервера."
-        if reply:
+        if isinstance(reply, str):
+            reply = BotReply(reply)
+        if reply and reply.text:
             try:
-                await self.api.send_message(chat_id, reply)
+                markup = reply.markup()
+                if markup:
+                    await self.api.send_message(chat_id, reply.text, markup)
+                else:
+                    await self.api.send_message(chat_id, reply.text)
             except TelegramError as e:
                 log.warning("telegram send failed: %s", e)
 

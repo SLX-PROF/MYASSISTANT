@@ -50,7 +50,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    if (res.status === 401 && path !== "/api/auth/login") {
+    if (res.status === 401 && path !== "/api/auth/login" && path !== "/api/auth/telegram") {
       window.dispatchEvent(new CustomEvent("atlas:unauthorized"));
     }
     throw new ApiError(detailOf(data, `Ошибка ${res.status}`), res.status);
@@ -68,6 +68,7 @@ export const api = {
   me: () => get<Me>("/api/auth/me"),
   login: (password: string, code?: string) =>
     post<Me & { csrf_token: string }>("/api/auth/login", { password, ...(code ? { code } : {}) }),
+  telegramLogin: (initData: string) => post<Me & { csrf_token: string }>("/api/auth/telegram", { init_data: initData }),
   logout: () => post<{ ok: boolean }>("/api/auth/logout"),
 
   conversations: () => get<Conversation[]>("/api/conversations"),

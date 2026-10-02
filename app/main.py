@@ -116,13 +116,14 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             bot = TelegramBot(telegram, settings, db, CommandHandler(db, monitor, regular, st.agent))
             bot.start()
         log.info(
-            "Atlas started (llm=%s, model=%s, tz=%s, telegram=%s, monitoring=%s, leads bot=%s)",
+            "Atlas started (llm=%s, model=%s, tz=%s, telegram=%s, monitoring=%s, leads bot=%s, mini app=%s)",
             llm.name,
             llm.model,
             settings.timezone,
             "on" if telegram else "off",
             "on" if site else "off",
             "on" if leads_telegram else "off",
+            "on" if settings.miniapp_url else "off",
         )
         try:
             yield

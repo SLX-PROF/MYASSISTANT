@@ -10,6 +10,13 @@ import "./styles/tokens.css";
 import "./styles/app.css";
 import { App } from "./App";
 import { StoreProvider } from "./lib/store";
+import { inTelegram, tg } from "./lib/telegram";
+
+if (inTelegram) {
+  tg.ready();
+  tg.expand();
+  tg.noVerticalSwipes();
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

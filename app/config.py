@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_allowed_chat_ids: str = ""  # comma separated numeric chat ids
     telegram_api_base: str = "https://api.telegram.org"
+    # Address of the Atlas web UI that the bot opens as a Telegram Mini App,
+    # e.g. https://s1824923.tailXXXX.ts.net/ (reachable only with Tailscale on).
+    telegram_miniapp_url: str = ""
     # Optional second bot that only delivers new site leads (send-only, no commands).
     # Empty = leads go through the main bot like everything else.
     leads_telegram_bot_token: SecretStr = SecretStr("")
@@ -115,6 +118,14 @@ class Settings(BaseSettings):
             date(2024, month, day)  # validates (leap year allows 02-29)
         return v
 
+    @field_validator("telegram_miniapp_url")
+    @classmethod
+    def _valid_miniapp_url(cls, v: str) -> str:
+        v = v.strip()
+        if v and not v.startswith("https://"):
+            raise ValueError("TELEGRAM_MINIAPP_URL must start with https:// (Telegram requires HTTPS)")
+        return v
+
     @field_validator("llm_effort")
     @classmethod
     def _valid_effort(cls, v: str) -> str:
@@ -138,6 +149,11 @@ class Settings(BaseSettings):
     @property
     def telegram_chat_ids(self) -> set[int]:
         return _chat_ids(self.telegram_allowed_chat_ids)
+
+    @property
+    def miniapp_url(self) -> str:
+        """Mini App needs the bot (it vouches for the user) and an HTTPS address."""
+        return self.telegram_miniapp_url if self.telegram_enabled else ""
 
     @property
     def leads_chat_ids(self) -> set[int]:

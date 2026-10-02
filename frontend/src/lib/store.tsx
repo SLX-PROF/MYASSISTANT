@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { tg, tgColorScheme } from "./telegram";
 import { api } from "./api";
 import type { ChatMessage, Conversation, Me, UISettings } from "./types";
 
@@ -42,11 +43,14 @@ export const DEFAULT_UI: UISettings = { theme: "dark", accent: "#22d3ee" };
 
 export function applyUi(ui: UISettings) {
   const root = document.documentElement;
-  const theme =
-    ui.theme === "system" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : ui.theme;
+  // "System" inside Telegram follows the Telegram theme.
+  const system = tgColorScheme() ?? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+  const theme = ui.theme === "system" ? system : ui.theme;
   root.dataset.theme = theme;
   root.style.setProperty("--accent", ui.accent);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#f3f6fb" : "#04060c");
+  const bg = theme === "light" ? "#f3f6fb" : "#04060c";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg);
+  tg.setColors(bg);
   try {
     localStorage.setItem("atlas.ui", JSON.stringify(ui));
   } catch {
@@ -139,7 +143,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const mq = matchMedia("(prefers-color-scheme: light)");
     const h = () => applyUi(ui);
     mq.addEventListener("change", h);
-    return () => mq.removeEventListener("change", h);
+    window.addEventListener("atlas:tg-theme", h);
+    return () => {
+      mq.removeEventListener("change", h);
+      window.removeEventListener("atlas:tg-theme", h);
+    };
   }, [ui]);
 
   const setUi = useCallback((u: UISettings) => {
