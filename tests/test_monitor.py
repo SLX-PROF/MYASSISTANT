@@ -337,3 +337,12 @@ async def test_leads_go_to_separate_bot_and_fall_back(db, settings):
     broken = Messenger(st, db, EventBus(), main, _Tg(fail=True))
     await broken.send_lead("Новая заявка №2")
     assert main.sent[-1] == (1, "Новая заявка №2")  # never lost
+
+
+def test_explanation_is_plain_text():
+    from app.monitor.explain import plain
+
+    assert plain("**Что случилось:** health трижды вернул 502.\n\n* лишний пункт\n## Итог") == (
+        "Что случилось: health трижды вернул 502.\nлишний пункт\nИтог"
+    )
+    assert plain("leads_feed: 502") == "leads_feed: 502"
