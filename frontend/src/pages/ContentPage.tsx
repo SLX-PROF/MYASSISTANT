@@ -42,6 +42,16 @@ const PLATFORMS: [Platform, string, string][] = [
   ["pinterest", "Pinterest", "P"],
 ];
 const PLATFORM = Object.fromEntries(PLATFORMS.map(([k, l, s]) => [k, { label: l, short: s }])) as Record<Platform, { label: string; short: string }>;
+/* Pastel tint per board; the platform name is always written, color is decoration only. */
+const PLATFORM_TINT: Record<Platform | "none", string> = {
+  tiktok: "#efd9de",
+  instagram: "#f2dfcf",
+  youtube: "#ecd3cf",
+  vk: "#d6dfec",
+  telegram: "#d3e5ea",
+  pinterest: "#e4d6e8",
+  none: "#e9e3e1",
+};
 
 /** A reference being prepared before upload: a photo or a link, each with its own comment. */
 type RefDraft =
@@ -58,9 +68,9 @@ const iconOf = (name: string) => ICONS[name] ?? Sparkles;
 const isDone = (it: ContentItem) => it.stage === "filmed" || it.stage === "published";
 const label = (d: Date) => `${d.getDate()} ${MONTHS_GEN[d.getMonth()]}`;
 
-type View = "week" | "month" | "bank" | "stats";
+type View = "week" | "month" | "boards" | "bank" | "stats";
 type Sheet =
-  | { mode: "new"; day: string | null }
+  | { mode: "new"; day: string | null; platform?: Platform }
   | { mode: "edit"; item: ContentItem }
   | { mode: "move"; item: ContentItem }
   | { mode: "refs"; item: ContentItem }
@@ -295,7 +305,7 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
           {!!meta?.tags.length && <p className="cp-tags">{meta.tags.map((t) => t.toUpperCase()).join(" · ")}</p>}
         </header>
 
-        {(view === "week" || view === "month" || view === "stats") && (
+        {(view === "week" || view === "month" || view === "boards" || view === "stats") && (
           <div className="cp-nav">
             <button type="button" className="cp-round" onClick={() => shift(-1)} aria-label="Назад">
               <ChevronLeft size={18} aria-hidden="true" />
@@ -338,6 +348,14 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
             onOpen={setDetail}
             onDay={(d) => setSheet({ mode: "day", day: d })}
           />
+        ) : view === "boards" ? (
+          <BoardsView
+            items={items}
+            today={today}
+            onOpen={setDetail}
+            onAdd={(platform) => setSheet({ mode: "new", day: today, platform })}
+            onToggle={(it) => update(it, { stage: isDone(it) ? "script" : "filmed" })}
+          />
         ) : view === "bank" ? (
           <BankView items={items} onOpen={setDetail} onAdd={() => setSheet({ mode: "new", day: null })} onPlan={(it) => setSheet({ mode: "move", item: it })} />
         ) : (
@@ -345,7 +363,7 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
         )}
       </div>
 
-      {(view === "week" || view === "bank") && !detail && (
+      {(view === "week" || view === "boards" || view === "bank") && !detail && (
         <button type="button" className="cp-fab" onClick={() => setSheet({ mode: "new", day: view === "bank" ? null : today })}>
           <Plus size={18} aria-hidden="true" /> Идея
         </button>
@@ -356,6 +374,7 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
           [
             ["week", "Неделя"],
             ["month", "Месяц"],
+            ["boards", "Соцсети"],
             ["bank", "Банк идей"],
             ["stats", "Итоги"],
           ] as [View, string][]
@@ -399,6 +418,7 @@ export default function ContentPage({ onExit, exitLabel }: { onExit: () => void;
             <ItemForm
               item={sheet.mode === "edit" ? sheet.item : null}
               day={sheet.mode === "new" ? sheet.day : sheet.item.day}
+              platform={sheet.mode === "new" ? sheet.platform : undefined}
               onCancel={() => setSheet(null)}
               onSave={async (f, drafts) => {
                 if (sheet.mode === "edit") {
@@ -630,6 +650,101 @@ function MonthView(props: {
         })}
       </div>
       <p className="cp-hint">Нажмите на идею — откроется её карточка, на число — все идеи дня. Идею можно перетащить на другой день.</p>
+    </>
+  );
+}
+
+/** One board per social network, only for networks that have ideas in the plan this month. */
+function BoardsView(props: {
+  items: ContentItem[];
+  today: string;
+  onOpen: (it: ContentItem) => void;
+  onAdd: (platform?: Platform) => void;
+  onToggle: (it: ContentItem) => void;
+}) {
+  const boards = useMemo(() => {
+    const planned = props.items.filter((it) => it.day).sort((a, b) => (a.day! < b.day! ? -1 : a.day! > b.day! ? 1 : a.position - b.position));
+    const out: { key: Platform | "none"; title: string; items: ContentItem[] }[] = [];
+    for (const [k, l] of PLATFORMS) {
+      const its = planned.filter((it) => it.platforms.includes(k));
+      if (its.length) out.push({ key: k, title: l, items: its });
+    }
+    const none = planned.filter((it) => it.platforms.length === 0);
+    if (none.length) out.push({ key: "none", title: "Без площадки", items: none });
+    return out;
+  }, [props.items]);
+
+  if (!boards.some((b) => b.key !== "none")) {
+    return (
+      <section className="cp-boards-empty">
+        <div className="cp-empty-card">
+          <p>Здесь появятся борды по соцсетям: TikTok, Telegram и другие.</p>
+          <p className="cp-muted">Выберите площадку в идее на этот месяц — и для неё появится свой борд.</p>
+          <button type="button" className="cp-btn" onClick={() => props.onAdd()}>
+            Добавить идею
+          </button>
+        </div>
+        {boards[0] && <p className="cp-hand-sm cp-center">без площадки в этом месяце: {boards[0].items.length}</p>}
+      </section>
+    );
+  }
+
+  return (
+    <>
+      <p className="cp-hand-sm cp-center">идеи месяца по площадкам</p>
+      <section className="cp-boards">
+        {boards.map((b) => {
+          const done = b.items.filter(isDone).length;
+          return (
+            <div key={b.key} className="cp-board">
+              <header className="cp-board-head" style={{ background: PLATFORM_TINT[b.key] }}>
+                <span className="cp-board-title">{b.title}</span>
+                <span className="cp-board-count">
+                  {done} / {b.items.length} снято
+                </span>
+              </header>
+              <div className="cp-board-items">
+                {b.items.map((it) => {
+                  const d = fromIso(it.day!);
+                  const Icon = iconOf(it.icon);
+                  return (
+                    <div key={it.id} className={`cp-item cp-board-item ${it.day === props.today ? "is-today" : ""}`}>
+                      <span className="cp-board-date">
+                        <b>{d.getDate()}</b>
+                        <span>{MONTHS_GEN[d.getMonth()]}</span>
+                      </span>
+                      <button type="button" className="cp-item-main" onClick={() => props.onOpen(it)}>
+                        <span className="cp-item-title">{it.title}</span>
+                        <span className="cp-item-meta">
+                          <span className="cp-dot" style={{ background: RUBRIC[it.rubric].color }} />
+                          {STAGES.find(([k]) => k === it.stage)?.[1]}
+                          {it.publish_time && ` · ${it.publish_time}`}
+                          {it.platforms.length > 1 && ` · ещё ${it.platforms.filter((p) => p !== b.key).map((p) => PLATFORM[p].short).join(" ")}`}
+                        </span>
+                      </button>
+                      <Icon size={18} strokeWidth={1.4} aria-hidden="true" className="cp-item-icon" />
+                      <button
+                        type="button"
+                        className={`cp-check ${isDone(it) ? "on" : ""}`}
+                        onClick={() => props.onToggle(it)}
+                        aria-label={isDone(it) ? "Отметить как не снятое" : "Отметить как снятое"}
+                      >
+                        <Check size={14} strokeWidth={3} aria-hidden="true" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              {b.key !== "none" && (
+                <button type="button" className="cp-board-add" onClick={() => props.onAdd(b.key as Platform)}>
+                  <Plus size={15} aria-hidden="true" /> Идея для {b.title}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </section>
+      <p className="cp-hint">Идея с несколькими площадками видна на каждом борде. Борд появляется, когда у площадки есть идея в этом месяце.</p>
     </>
   );
 }
@@ -898,6 +1013,7 @@ function SheetFrame({ children, onClose }: { children: React.ReactNode; onClose:
 function ItemForm(props: {
   item: ContentItem | null;
   day: string | null;
+  platform?: Platform;
   onCancel: () => void;
   onSave: (f: ItemFields & { title: string }, drafts: RefDraft[]) => void;
 }) {
@@ -909,7 +1025,7 @@ function ItemForm(props: {
   const [time, setTime] = useState(it?.publish_time ?? "");
   const [hook, setHook] = useState(it?.hook ?? "");
   const [note, setNote] = useState(it?.note ?? "");
-  const [platforms, setPlatforms] = useState<Platform[]>(it?.platforms ?? []);
+  const [platforms, setPlatforms] = useState<Platform[]>(it?.platforms ?? (props.platform ? [props.platform] : []));
   const [drafts, setDrafts] = useState<RefDraft[]>([]);
   const [busy, setBusy] = useState(false);
 
