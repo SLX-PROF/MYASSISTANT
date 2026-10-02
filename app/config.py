@@ -109,6 +109,20 @@ class Settings(BaseSettings):
     voice_model: str = "small"
     voice_threads: int = 0  # 0 = automatic
 
+    # --- Mail (read-only IMAP) ----------------------------------------------
+    # "me@gmail.com:app-password, me@yandex.ru:app-password". Empty = mail off.
+    mail_accounts: SecretStr = SecretStr("")
+    # Hosts for other domains: "example.com=imap.example.com" (known providers are built in).
+    mail_imap_hosts: str = ""
+    # Daily digest of new mail (HH:MM, empty = off).
+    mail_digest_time: str = "08:45"
+    # Send the first lines of letters to the model (better summary). False = senders and subjects only.
+    mail_snippets: bool = True
+    # Senders the model never sees (only counted): banks, government, etc.
+    mail_exclude: str = ""
+    # Model for mail analysis; empty = LLM_MODEL.
+    mail_llm_model: str = ""
+
     # --- Server health and backups ------------------------------------------
     # Warn when free disk space or memory falls below these values.
     disk_min_free_percent: int = 10
@@ -170,7 +184,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "content_reminder_time", "finance_reminder_time", "weekly_summary_time", "content_evening_time",
-        "finance_weekly_time", "morning_brief_time", "backup_weekly_time",
+        "finance_weekly_time", "morning_brief_time", "backup_weekly_time", "mail_digest_time",
     )  # fmt: skip
     @classmethod
     def _valid_hhmm(cls, v: str) -> str:
@@ -249,6 +263,14 @@ class Settings(BaseSettings):
         from urllib.parse import urlsplit
 
         return urlsplit(self.public_base_url).netloc.lower() if self.public_base_url else ""
+
+    @property
+    def mail_enabled(self) -> bool:
+        return bool(self.mail_accounts.get_secret_value().strip())
+
+    @property
+    def mail_excluded(self) -> set[str]:
+        return {d.strip().lower().lstrip("@") for d in self.mail_exclude.split(",") if d.strip()}
 
     @property
     def leads_chat_ids(self) -> set[int]:

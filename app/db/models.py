@@ -338,3 +338,35 @@ class Note(Base):
     tags: Mapped[str] = mapped_column(String(300), default="")  # comma separated
     source: Mapped[str] = mapped_column(String(20), default="chat")  # chat | telegram | forward | web | voice
     created_at: Mapped[datetime] = mapped_column(default=utcnow, index=True)
+
+
+# ------------------------------------------------------------------- mail
+
+
+class MailService(Base):
+    """A sender service found in the mailbox history («какие у меня аккаунты и подписки»).
+
+    Only aggregates are stored: counts, dates, a few subjects. Letters themselves
+    are not kept.
+    """
+
+    __tablename__ = "mail_services"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    domain: Mapped[str] = mapped_column(String(200), unique=True)
+    accounts: Mapped[str] = mapped_column(String(500), default="")  # comma separated mailbox addresses
+    name: Mapped[str] = mapped_column(String(200), default="")  # display name from headers, then from the model
+    category: Mapped[str] = mapped_column(String(30), default="", index=True)  # "" = not classified yet
+    suggest: Mapped[str] = mapped_column(String(20), default="")  # keep | unsubscribe | cancel | delete_account | review
+    price: Mapped[str] = mapped_column(String(60), default="")
+    note: Mapped[str] = mapped_column(String(300), default="")
+    count: Mapped[int] = mapped_column(Integer, default=0)
+    first_seen: Mapped[datetime | None] = mapped_column(default=None)
+    last_seen: Mapped[datetime | None] = mapped_column(default=None, index=True)
+    subjects: Mapped[list[Any]] = mapped_column(default=list)
+    unsubscribe: Mapped[str] = mapped_column(String(1000), default="")
+    one_click: Mapped[bool] = mapped_column(Boolean, default=False)
+    welcome: Mapped[bool] = mapped_column(Boolean, default=False)
+    payment: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="new")  # new | keep | unsubscribed | done | hidden
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow)

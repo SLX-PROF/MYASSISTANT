@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from app.api import auth, chat, content, finance, items, notes, notifications
+from app.api import auth, chat, content, finance, items, mail, notes, notifications
 from app.briefing import morning_brief, weather
 from app.channels.base import CompositeNotifier
 from app.channels.telegram import TelegramAPI, TelegramBot, TelegramNotifier
@@ -103,6 +103,23 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
         extra_tools = monitor_tools(monitor, regular) if settings.monitoring_enabled else []
         extra_tools += content_tools() + finance_tools() + notes_tools()
         host = HostMonitor(db, settings, messenger, alerts, telegram)
+        st_mail = None
+        if settings.mail_enabled:
+            from app.mail.digest import MailDigest
+            from app.mail.imap import MailError, parse_accounts
+            from app.mail.inventory import MailInventory
+            from app.mail.llm import MailLLM
+
+            try:
+                mail_accounts = parse_accounts(settings.mail_accounts.get_secret_value(), settings.mail_imap_hosts)
+                mail_provider = llm
+                if settings.mail_llm_model and not isinstance(llm, FakeProvider):
+                    mail_provider = create_provider(settings.model_copy(update={"llm_model": settings.mail_llm_model}))
+                mail_llm = None if isinstance(mail_provider, FakeProvider) else MailLLM(db, settings, mail_provider)
+                st_mail = {"inventory": MailInventory(db, settings, mail_llm), "digest": MailDigest(db, settings, mail_llm)}
+                log.info("mail: %s mailbox(es)", len(mail_accounts))
+            except (MailError, LLMError) as e:
+                log.error("mail disabled: %s", e)
 
         st = app.state
         st.settings = settings
@@ -161,6 +178,11 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             text = await morning_brief(db, settings, utcnow(), await weather(settings), leads_on=site is not None)
             await messenger.send(text, title="Утро")
 
+        async def mail_digest() -> None:
+            text = await st_mail["digest"].build(utcnow())
+            if text:
+                await messenger.send(text, title="Почта")
+
         async def payment_reminders() -> None:
             async with db.session() as s:
                 texts = await finance_service.due_reminders(s, local_today())
@@ -179,6 +201,9 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
         if settings.morning_brief_time:
             hh, mm = (int(x) for x in settings.morning_brief_time.split(":"))
             scheduler.add_job(brief, CronTrigger(hour=hh, minute=mm, timezone=settings.tz), "morning-brief")
+        if st_mail and settings.mail_digest_time:
+            hh, mm = (int(x) for x in settings.mail_digest_time.split(":"))
+            scheduler.add_job(mail_digest, CronTrigger(hour=hh, minute=mm, timezone=settings.tz), "mail-digest")
         if settings.finance_weekly_time:
             hh, mm = (int(x) for x in settings.finance_weekly_time.split(":"))
             scheduler.add_job(finance_weekly, CronTrigger(day_of_week=0, hour=hh, minute=mm, timezone=settings.tz), "finance-weekly")
@@ -210,7 +235,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
                     return f"Сохранил в заметки: {notes_service.short(n)}\nНайти потом: «что я сохранял про …»"
 
             bot = TelegramBot(
-                telegram, settings, db, CommandHandler(db, monitor, regular, st.agent), transcriber=transcriber, note_saver=save_forward
+                telegram, settings, db, CommandHandler(db, monitor, regular, st.agent, mail=st_mail), transcriber=transcriber, note_saver=save_forward
             )
             bot.start()
         log.info(
@@ -224,6 +249,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             "on" if settings.miniapp_url else "off",
         )
         st.host = host
+        st.mail = st_mail
         try:
             yield
         finally:
@@ -242,7 +268,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
     app = FastAPI(title="Atlas", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(SecurityMiddleware, settings=settings)
 
-    for r in (auth.router, chat.router, items.router, notifications.router, content.router, finance.router, notes.router):
+    for r in (auth.router, chat.router, items.router, notifications.router, content.router, finance.router, notes.router, mail.router):
         app.include_router(r)
 
     @app.api_route("/api/health", methods=["GET", "HEAD"])

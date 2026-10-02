@@ -149,3 +149,48 @@ export function rub(kop: number): string {
   const r = Math.round(Math.abs(kop) / 100);
   return `${r.toLocaleString("ru-RU").replace(/ /g, " ")} ₽`;
 }
+
+/* --------------------------------------------------------------- mail */
+
+export type MailProgress = {
+  state: "idle" | "collecting" | "collected" | "classifying" | "done" | "error";
+  message?: string;
+  letters?: number;
+  total?: number;
+  people?: number;
+  services?: number;
+  pending?: number;
+  classified?: number;
+  estimate_usd?: number;
+  model?: string;
+};
+export type MailStatus = { enabled: false } | { enabled: true; accounts: string[]; busy: boolean; progress: MailProgress; categories: Record<string, string>; digest_time: string };
+export type MailService = {
+  id: number;
+  domain: string;
+  accounts: string;
+  name: string;
+  category: string;
+  category_label: string;
+  suggest: string;
+  suggest_label: string;
+  price: string;
+  note: string;
+  count: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  subjects: string[];
+  unsubscribe: string;
+  one_click: boolean;
+  status: "new" | "keep" | "unsubscribed" | "done" | "hidden";
+};
+
+export const mailApi = {
+  status: () => request<MailStatus>("GET", "/api/mail/status"),
+  collect: () => request<{ ok: boolean }>("POST", "/api/mail/collect"),
+  classify: () => request<{ ok: boolean }>("POST", "/api/mail/classify"),
+  services: () => request<MailService[]>("GET", "/api/mail/services"),
+  setStatus: (id: number, status: MailService["status"]) => request<MailService>("PATCH", `/api/mail/services/${id}`, { status }),
+  unsubscribe: (id: number) => request<MailService>("POST", `/api/mail/services/${id}/unsubscribe`),
+  digest: () => request<{ text: string }>("POST", "/api/mail/digest"),
+};

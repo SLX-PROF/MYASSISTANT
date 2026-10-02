@@ -1,0 +1,182 @@
+/* Mail inventory and digest (Atlas design tokens). */
+.mail .page-inner {
+  gap: var(--sp-3);
+}
+.mail-block {
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  align-items: flex-start;
+}
+.mail-block h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+.mail-block .hint {
+  margin: 0;
+}
+.mail-head {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.mail-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mail-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+}
+.spin {
+  animation: mail-spin 1s linear infinite;
+}
+@keyframes mail-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.mail-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}
+.mail-confirm {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: var(--fs-sm);
+}
+.mail-confirm span {
+  flex: 1;
+  min-width: 220px;
+}
+.mail-filters {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.mail-filters button {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.mail-filters button[aria-selected="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+.mail-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.mail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.mail-row {
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mail-row.handled {
+  opacity: 0.6;
+}
+.mail-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  align-items: flex-start;
+}
+.mail-row-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.mail-row-name .hint {
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.mail-badge {
+  flex: none;
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mail-badge.s-cancel,
+.mail-badge.s-delete_account {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 50%, transparent);
+}
+.mail-badge.s-unsubscribe {
+  color: var(--warning);
+  border-color: color-mix(in oklab, var(--warning) 50%, transparent);
+}
+.mail-badge.s-keep {
+  color: var(--success);
+  border-color: color-mix(in oklab, var(--success) 50%, transparent);
+}
+.mail-note {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.mail-subj {
+  margin: 0;
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.mail-actions a.btn {
+  text-decoration: none;
+}
+.mail-done {
+  color: var(--success);
+  font-size: var(--fs-sm);
+}
+.mail-digest {
+  margin: 0;
+  width: 100%;
+  white-space: pre-wrap;
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}

@@ -33,6 +33,7 @@ HELP = """Команды Атласа:
 /done <ключ> — отметить задачу выполненной
 /snooze <ключ> 3d — отложить (не больше 14 дней)
 /lastdone — когда задачи выполнялись последний раз
+/mail — сводка почты прямо сейчас
 /app — открыть Атлас как приложение
 /help — эта справка
 
@@ -55,7 +56,8 @@ def parse_duration(text: str) -> timedelta | None:
 
 
 class CommandHandler:
-    def __init__(self, db: Database, monitor: MonitorService, regular: RegularTasks, agent: Agent, clock=utcnow):
+    def __init__(self, db: Database, monitor: MonitorService, regular: RegularTasks, agent: Agent, clock=utcnow, mail=None):
+        self.mail = mail
         self.db = db
         self.monitor = monitor
         self.regular = regular
@@ -84,6 +86,7 @@ class CommandHandler:
             "/snooze": self._snooze,
             "/lastdone": lambda c, a: self.regular.lastdone_report(),
             "/app": self._app,
+            "/mail": self._mail,
         }
         h = handlers.get(cmd)
         if h is None:
@@ -92,6 +95,13 @@ class CommandHandler:
 
     async def _help(self, chat_id: int, arg: str) -> str:
         return HELP
+
+    async def _mail(self, chat_id: int, arg: str) -> str:
+        if not self.mail:
+            return "Почта не подключена: впишите MAIL_ACCOUNTS в .env."
+        d = self.mail["digest"]
+        letters, _, errors = await d.collect(self.clock())
+        return await d.render(letters, errors) or "С прошлой сводки новых писем нет."
 
     async def _app(self, chat_id: int, arg: str) -> str | BotReply:
         url = self.monitor.settings.miniapp_url
