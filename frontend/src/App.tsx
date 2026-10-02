@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Menu, PanelRight, Search, WifiOff, X } from "lucide-react";
 import { api, setCsrf } from "./lib/api";
 import { inTelegram, onTelegram, tg, tgInitData } from "./lib/telegram";
@@ -12,6 +12,9 @@ import { MemoryPage, ReminderList, RemindersPage, TaskList, TasksPage } from "./
 import { LoginPage } from "./pages/LoginPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ShowcasePage } from "./pages/ShowcasePage";
+
+const ContentPage = lazy(() => import("./pages/ContentPage"));
+const FinancePage = lazy(() => import("./pages/FinancePage"));
 
 async function showSystemNotification(title: string, body: string, url: string) {
   if (!("Notification" in window) || Notification.permission !== "granted") return false;
@@ -55,6 +58,8 @@ const TITLES: Record<string, string> = {
   reminders: "Напоминания",
   memory: "Память",
   settings: "Настройки",
+  finance: "Финансы",
+  content: "Контент-план",
   showcase: "Витрина",
 };
 
@@ -164,6 +169,17 @@ export function App() {
   }
   if (!me.authenticated) return <LoginPage />;
 
+  if (route.name === "content") {
+    return (
+      <>
+        <Suspense fallback={<div className="boot" />}>
+          <ContentPage onExit={() => navigate({ name: "chat", id: null })} />
+        </Suspense>
+        <Toasts />
+      </>
+    );
+  }
+
   const conv = route.name === "chat" && route.id ? conversations.find((c) => c.id === route.id) : null;
   const title = route.name === "chat" ? (conv?.title ?? "Новый чат") : TITLES[route.name];
 
@@ -206,6 +222,11 @@ export function App() {
           {route.name === "reminders" && <RemindersPage />}
           {route.name === "memory" && <MemoryPage />}
           {route.name === "settings" && <SettingsPage />}
+          {route.name === "finance" && (
+            <Suspense fallback={<p className="hint" style={{ padding: 24 }}>Загружаю…</p>}>
+              <FinancePage />
+            </Suspense>
+          )}
           <BottomNav />
         </main>
         {panelOpen && <SidePanel />}

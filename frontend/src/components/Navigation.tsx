@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlarmClock, Brain, Ellipsis, ListChecks, MessageSquare, Plus, Search, Settings, X } from "lucide-react";
+import { AlarmClock, Brain, CalendarHeart, Ellipsis, ListChecks, MessageSquare, Plus, Search, Settings, Wallet, X } from "lucide-react";
 import { useStore, type Route } from "../lib/store";
 import { Orb } from "./Orb";
 
@@ -13,6 +13,8 @@ export function Sidebar() {
   const pages: { r: Route; label: string; icon: React.ReactNode }[] = [
     { r: { name: "tasks" }, label: "Задачи", icon: <ListChecks size={17} aria-hidden="true" /> },
     { r: { name: "reminders" }, label: "Напоминания", icon: <AlarmClock size={17} aria-hidden="true" /> },
+    { r: { name: "finance" }, label: "Финансы", icon: <Wallet size={17} aria-hidden="true" /> },
+    { r: { name: "content" }, label: "Контент-план", icon: <CalendarHeart size={17} aria-hidden="true" /> },
     { r: { name: "memory" }, label: "Память", icon: <Brain size={17} aria-hidden="true" /> },
     { r: { name: "settings" }, label: "Настройки", icon: <Settings size={17} aria-hidden="true" /> },
   ];
@@ -65,6 +67,7 @@ export function BottomNav() {
     { r: { name: "chat", id: route.name === "chat" ? route.id : lastId }, label: "Чат", icon: <MessageSquare size={20} aria-hidden="true" />, active: route.name === "chat", badge: unread },
     { r: { name: "tasks" }, label: "Задачи", icon: <ListChecks size={20} aria-hidden="true" />, active: route.name === "tasks" },
     { r: { name: "reminders" }, label: "Напоминания", icon: <AlarmClock size={20} aria-hidden="true" />, active: route.name === "reminders" },
+    { r: { name: "finance" }, label: "Финансы", icon: <Wallet size={20} aria-hidden="true" />, active: route.name === "finance" },
     { r: { name: "settings" }, label: "Ещё", icon: <Ellipsis size={20} aria-hidden="true" />, active: route.name === "settings" || route.name === "memory" },
   ];
   return (
@@ -116,6 +119,8 @@ export function CommandPalette() {
       { key: "new", label: "Новый чат", icon: <Plus size={16} />, go: { name: "chat", id: null }, group: "Действия" },
       { key: "tasks", label: "Задачи", icon: <ListChecks size={16} />, go: { name: "tasks" }, group: "Разделы" },
       { key: "reminders", label: "Напоминания", icon: <AlarmClock size={16} />, go: { name: "reminders" }, group: "Разделы" },
+      { key: "finance", label: "Финансы", icon: <Wallet size={16} />, go: { name: "finance" }, group: "Разделы" },
+      { key: "content", label: "Контент-план", icon: <CalendarHeart size={16} />, go: { name: "content" }, group: "Разделы" },
       { key: "memory", label: "Память", icon: <Brain size={16} />, go: { name: "memory" }, group: "Разделы" },
       { key: "settings", label: "Настройки", icon: <Settings size={16} />, go: { name: "settings" }, group: "Разделы" },
     ];

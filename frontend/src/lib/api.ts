@@ -33,7 +33,7 @@ function detailOf(body: unknown, fallback: string): string {
   return fallback;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
@@ -148,4 +148,23 @@ export async function streamChat(
       }
     }
   }
+}
+
+
+/** Raw file upload (photos): the body is the file itself. */
+export async function upload<T>(path: string, file: Blob): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": file.type || "application/octet-stream", "X-CSRF-Token": csrfToken },
+      body: file,
+    });
+  } catch {
+    throw new ApiError("Нет соединения с сервером.", 0);
+  }
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError(detailOf(data, `Ошибка ${res.status}`), res.status);
+  return data as T;
 }

@@ -176,7 +176,11 @@ class RecurringPatch(BaseModel):
 @router.post("/recurring")
 async def create_recurring(body: RecurringIn, request: Request):
     async with request.app.state.db.session() as s:
-        r = FinRecurring(**body.model_dump(), next_due=fs.first_due(_today(request), body.day_of_month))
+        data = body.model_dump()
+        if data["category_id"] is None:
+            cat = await fs.find_category(s, body.title, "expense")
+            data["category_id"] = cat.id if cat else None
+        r = FinRecurring(**data, next_due=fs.first_due(_today(request), body.day_of_month))
         s.add(r)
         await s.commit()
         cats = {c.id: c for c in await fs.categories(s, include_archived=True)}

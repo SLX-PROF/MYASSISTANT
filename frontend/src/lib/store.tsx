@@ -11,6 +11,8 @@ export type Route =
   | { name: "reminders" }
   | { name: "memory" }
   | { name: "settings" }
+  | { name: "finance" }
+  | { name: "content" }
   | { name: "showcase" };
 
 export function parseRoute(path: string): Route {
@@ -25,6 +27,10 @@ export function parseRoute(path: string): Route {
       return { name: "memory" };
     case "/settings":
       return { name: "settings" };
+    case "/finance":
+      return { name: "finance" };
+    case "/content":
+      return { name: "content" };
     case "/showcase":
       return { name: "showcase" };
     default:

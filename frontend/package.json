@@ -11,7 +11,10 @@
     "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
+    "@fontsource/caveat": "5.3.0",
+    "@fontsource/cormorant-garamond": "5.3.0",
     "@fontsource/inter": "5.3.0",
+    "@fontsource/manrope": "5.3.0",
     "@fontsource/space-grotesk": "5.3.0",
     "lucide-react": "1.48.0",
     "react": "19.3.0",
