@@ -78,6 +78,7 @@ def test_parse_accounts():
         ("you@yandex.ru", "x1", "imap.yandex.ru"),
         ("a@corp.io", "p", "mail.corp.io"),
     ]
+    assert parse_accounts("me@zohomail.eu:p")[0].host == "imap.zoho.eu"
     with pytest.raises(MailError):
         parse_accounts("no-password@gmail.com")
 
