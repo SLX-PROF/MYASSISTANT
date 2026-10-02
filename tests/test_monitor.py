@@ -294,7 +294,7 @@ async def test_reports(db, settings):
     assert "№5" in await svc.leads_report()
     assert "Расход Claude API" in await svc.cost_report()
     summary = await svc.weekly_summary()
-    assert "Сводка за неделю" in summary and "Заявок: 1" in summary
+    assert "Сводка за неделю" in summary and "Заявок за неделю: 1" in summary
 
 
 # ------------------------------------------------------------- leads bot

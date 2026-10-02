@@ -306,3 +306,35 @@ class FinRecurring(Base):
     remind_days: Mapped[int] = mapped_column(Integer, default=2)
     reminded_for: Mapped[date | None] = mapped_column(Date, default=None)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class FinGoal(Base):
+    """A savings goal: «отпуск 150 000 ₽ к июню»."""
+
+    __tablename__ = "fin_goals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(100))
+    target: Mapped[int] = mapped_column(Integer)  # kopecks
+    saved: Mapped[int] = mapped_column(Integer, default=0)  # kopecks
+    deadline: Mapped[date | None] = mapped_column(Date, default=None)
+    color: Mapped[str] = mapped_column(String(9), default="#5eead4")
+    done_at: Mapped[datetime | None] = mapped_column(default=None)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+# ------------------------------------------------------------------ notes
+
+
+class Note(Base):
+    """A saved thought or link («второй мозг»)."""
+
+    __tablename__ = "notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    text: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(String(1000), default="")
+    title: Mapped[str] = mapped_column(String(300), default="")  # page title for links
+    tags: Mapped[str] = mapped_column(String(300), default="")  # comma separated
+    source: Mapped[str] = mapped_column(String(20), default="chat")  # chat | telegram | forward | web | voice
+    created_at: Mapped[datetime] = mapped_column(default=utcnow, index=True)

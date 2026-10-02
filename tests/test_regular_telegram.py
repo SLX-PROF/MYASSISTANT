@@ -149,6 +149,9 @@ class FakeTelegram:
     async def send_message(self, chat_id, text):
         self.sent.append((chat_id, text))
 
+    async def send_chat_action(self, chat_id, action="typing"):
+        pass
+
 
 async def test_bot_ignores_strangers(db, settings, caplog):
     st = settings.model_copy(update={"telegram_bot_token": "x", "telegram_allowed_chat_ids": "111"})

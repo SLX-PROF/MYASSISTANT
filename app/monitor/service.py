@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.config import Settings
@@ -75,7 +75,8 @@ class MonitorService:
             "weekly-summary",
         )
         if self.settings.heartbeat_url:
-            add_job(self.heartbeat, CronTrigger(hour=12, minute=7, timezone=tz), "heartbeat")
+            # Every 5 minutes: the outside service raises the alarm when pings stop.
+            add_job(self.heartbeat, IntervalTrigger(seconds=300), "heartbeat")
         add_job(self.backup, CronTrigger(hour=4, minute=15, timezone=tz), "atlas-backup")
 
     async def poll_minutely(self) -> None:
@@ -276,11 +277,44 @@ class MonitorService:
         lines.append("Оценка по ценам модели; точные цифры в консоли Anthropic.")
         return "\n".join(lines)
 
+    async def leads_week(self) -> list[str]:
+        """Leads for the last 7 days vs the 7 before: count, change, types, sources, busiest day."""
+        now = self.clock()
+        tz = self.settings.tz
+        async with self.db.session() as s:
+            rows = (await s.scalars(select(Lead).where(Lead.created_at >= now - timedelta(days=14)))).all()
+        week = [x for x in rows if x.created_at >= now - timedelta(days=7)]
+        prev = len(rows) - len(week)
+        line = f"Заявок за неделю: {len(week)}"
+        if prev:
+            diff = (len(week) - prev) * 100 // prev
+            line += f" (неделей раньше {prev}, {'+' if diff > 0 else ''}{diff}%)"
+        elif week:
+            line += " (неделей раньше 0)"
+        out = [line]
+        if week:
+            def top(counter: dict[str, int], names: dict[str, str]) -> str:
+                return ", ".join(f"{names.get(k, k)} {v}" for k, v in sorted(counter.items(), key=lambda x: -x[1]))
+
+            types: dict[str, int] = {}
+            sources: dict[str, int] = {}
+            days: dict[str, int] = {}
+            for lead in week:
+                types[lead.type] = types.get(lead.type, 0) + 1
+                sources[lead.source] = sources.get(lead.source, 0) + 1
+                d = lead.created_at.astimezone(tz).strftime("%d.%m")
+                days[d] = days.get(d, 0) + 1
+            out.append(f"По типам: {top(types, TYPE_RU)}")
+            out.append(f"Источники: {top(sources, SOURCE_RU)}")
+            best = max(days.items(), key=lambda x: x[1])
+            if best[1] > 1:
+                out.append(f"Больше всего {best[0]}: {best[1]}")
+        return out
+
     async def weekly_summary(self) -> str:
         now = self.clock()
         avail = await self.availability(7)
         async with self.db.session() as s:
-            leads = await s.scalar(select(func.count()).select_from(Lead).where(Lead.created_at >= now - timedelta(days=7)))
             spent = await usage.month_spend_usd(s)
             last = await kv.get(s, "last_status") or {}
         budget = self.settings.llm_monthly_budget_usd
@@ -289,7 +323,7 @@ class MonitorService:
         lines = ["Сводка за неделю"]
         if self.site is not None:
             lines.append(f"Доступность: {avail:.2f}%" if avail is not None else "Доступность: нет данных")
-            lines.append(f"Заявок: {leads or 0}")
+            lines += await self.leads_week()
             reboot = last.get("rebootNeeded")
             if reboot is not None:
                 lines.append("Перезагрузка сервера: " + ("нужна" if reboot else "не нужна"))

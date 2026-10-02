@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.db.models import FinCategory, FinRecurring, FinTransaction, utcnow
+from app.db.models import FinCategory, FinGoal, FinRecurring, FinTransaction, utcnow
 from app.finance import service as fs
 from app.security import require_session
 
@@ -30,6 +30,16 @@ async def summary(request: Request, month: str | None = None):
     try:
         async with request.app.state.db.session() as s:
             return await fs.summary(s, month or f"{today:%Y-%m}", today)
+    except fs.FinanceError as e:
+        raise _bad(e) from e
+
+
+@router.get("/history")
+async def history(request: Request, month: str | None = None, months: int = 6):
+    """Income and expense per month, for the bar chart."""
+    try:
+        async with request.app.state.db.session() as s:
+            return await fs.history(s, month or f"{_today(request):%Y-%m}", max(1, min(months, 24)))
     except fs.FinanceError as e:
         raise _bad(e) from e
 
@@ -225,3 +235,82 @@ async def recurring_paid(rid: int, request: Request):
             return {"recurring": fs.recurring_out(r, cats), "transaction": fs.tx_out(t, cats)}
     except fs.FinanceError as e:
         raise _bad(e) from e
+
+
+# -------------------------------------------------------------------- goals
+
+
+class GoalIn(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    target: int = Field(gt=0, le=10_000_000_000, description="kopecks")
+    saved: int = Field(default=0, ge=0, le=10_000_000_000)
+    deadline: date | None = None
+    color: str = Field(default="#5eead4", pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class GoalPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=100)
+    target: int | None = Field(default=None, gt=0, le=10_000_000_000)
+    deadline: date | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class DepositIn(BaseModel):
+    amount: int = Field(ge=-10_000_000_000, le=10_000_000_000, description="kopecks; negative = take back")
+
+
+@router.get("/goals")
+async def list_goals(request: Request):
+    today = _today(request)
+    async with request.app.state.db.session() as s:
+        return [fs.goal_out(g, today) for g in await fs.goals(s)]
+
+
+@router.post("/goals")
+async def create_goal(body: GoalIn, request: Request):
+    try:
+        async with request.app.state.db.session() as s:
+            g = await fs.add_goal(s, **body.model_dump())
+            await s.commit()
+            return fs.goal_out(g, _today(request))
+    except fs.FinanceError as e:
+        raise _bad(e) from e
+
+
+@router.patch("/goals/{gid}")
+async def patch_goal(gid: int, body: GoalPatch, request: Request):
+    async with request.app.state.db.session() as s:
+        g = await s.get(FinGoal, gid)
+        if g is None:
+            raise HTTPException(404, "Нет такой цели")
+        for k, v in body.model_dump(exclude_unset=True).items():
+            if k == "title" and v:
+                v = v.strip()
+            if k in ("title", "target", "color") and v is None:
+                continue
+            setattr(g, k, v)
+        fs.deposit(g, 0)  # re-evaluates «reached» after a target change
+        await s.commit()
+        return fs.goal_out(g, _today(request))
+
+
+@router.post("/goals/{gid}/deposit")
+async def deposit_goal(gid: int, body: DepositIn, request: Request):
+    async with request.app.state.db.session() as s:
+        g = await s.get(FinGoal, gid)
+        if g is None:
+            raise HTTPException(404, "Нет такой цели")
+        reached = fs.deposit(g, body.amount)
+        await s.commit()
+        return {**fs.goal_out(g, _today(request)), "reached": reached}
+
+
+@router.delete("/goals/{gid}")
+async def delete_goal(gid: int, request: Request):
+    async with request.app.state.db.session() as s:
+        g = await s.get(FinGoal, gid)
+        if g is None:
+            raise HTTPException(404, "Нет такой цели")
+        await s.delete(g)
+        await s.commit()
+    return {"ok": True}

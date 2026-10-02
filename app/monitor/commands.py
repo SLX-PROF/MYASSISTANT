@@ -36,7 +36,8 @@ HELP = """Команды Атласа:
 /app — открыть Атлас как приложение
 /help — эта справка
 
-Любой другой текст — вопрос Атласу: напоминания, задачи, вопросы о состоянии сайта."""
+Любой другой текст — вопрос Атласу: напоминания, задачи, финансы, заметки, вопросы о состоянии сайта.
+Можно говорить голосом. Пересланное сообщение сохраняется в заметки."""
 
 
 def parse_duration(text: str) -> timedelta | None:
@@ -185,8 +186,8 @@ def card_line(card: dict, tz) -> str | None:
     if t == "task":
         due = fmt(card.get("due_at"))[:10] if card.get("due_at") else "без срока"
         return f"[задача] {card['title']} — {due}" + (" (выполнена)" if card.get("status") == "done" else "")
-    if t in ("content", "finance"):
-        return f"[{'контент' if t == 'content' else 'финансы'}] {card['text']}"
+    if t in ("content", "finance", "note"):
+        return f"[{ {'content': 'контент', 'finance': 'финансы', 'note': 'заметки'}[t] }] {card['text']}"
     if t == "fact":
         return f"[память] {card['text']}"
     if t == "reminder_list":

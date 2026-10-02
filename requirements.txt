@@ -12,3 +12,6 @@ argon2-cffi==25.1.0
 anthropic==1.9.0
 httpx==0.28.1
 tzdata==2026.4
+faster-whisper==1.2.1
+ctranslate2==4.8.2
+av==16.0.1  # newer av breaks faster-whisper 1.2.1 decode_audio

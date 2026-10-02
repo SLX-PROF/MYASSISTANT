@@ -92,6 +92,33 @@ class Settings(BaseSettings):
     content_publish_remind_minutes: int = 30  # 0 = off
     content_evening_time: str = "20:00"  # "tomorrow is not filmed yet"; empty = off
     finance_reminder_time: str = "10:05"
+    # Monday-morning finance digest for the past week (HH:MM, empty = off).
+    finance_weekly_time: str = "09:05"
+
+    # --- Morning brief ---------------------------------------------------
+    # Daily message: tasks, reminders, payments, leads, budget, weather. Empty = off.
+    morning_brief_time: str = "08:30"
+    weather_city: str = "Москва"
+    weather_lat: float | None = 55.7558  # empty = no weather
+    weather_lon: float | None = 37.6173
+
+    # --- Voice messages ---------------------------------------------------
+    # Telegram voice messages are transcribed on the server (faster-whisper).
+    voice_enabled: bool = True
+    # tiny | base | small | medium: bigger is more accurate and slower. small ≈ 0.5 GB.
+    voice_model: str = "small"
+    voice_threads: int = 0  # 0 = automatic
+
+    # --- Server health and backups ------------------------------------------
+    # Warn when free disk space or memory falls below these values.
+    disk_min_free_percent: int = 10
+    memory_min_free_percent: int = 8
+    # Weekly archive of the database and uploaded photos (day 0 = Monday, HH:MM).
+    backup_weekly_weekday: int = 6  # Sunday
+    backup_weekly_time: str = "04:30"
+    backup_weekly_keep: int = 6
+    # Also send the weekly archive to your Telegram (private chat with the bot).
+    backup_to_telegram: bool = True
 
     # --- Site monitoring (empty SITE_BASE_URL = monitoring off) ------------
     site_base_url: str = ""
@@ -141,7 +168,10 @@ class Settings(BaseSettings):
             raise ValueError("TELEGRAM_MINIAPP_URL must start with https:// (Telegram requires HTTPS)")
         return v
 
-    @field_validator("content_reminder_time", "finance_reminder_time", "weekly_summary_time", "content_evening_time")
+    @field_validator(
+        "content_reminder_time", "finance_reminder_time", "weekly_summary_time", "content_evening_time",
+        "finance_weekly_time", "morning_brief_time", "backup_weekly_time",
+    )  # fmt: skip
     @classmethod
     def _valid_hhmm(cls, v: str) -> str:
         v = v.strip()
@@ -149,6 +179,19 @@ class Settings(BaseSettings):
             hh, mm = (int(x) for x in v.split(":"))
             if not (0 <= hh < 24 and 0 <= mm < 60):
                 raise ValueError("expected HH:MM")
+        return v
+
+    @field_validator("weather_lat", "weather_lon", mode="before")
+    @classmethod
+    def _empty_coord(cls, v):
+        return None if isinstance(v, str) and not v.strip() else v
+
+    @field_validator("voice_model")
+    @classmethod
+    def _valid_voice_model(cls, v: str) -> str:
+        allowed = {"tiny", "base", "small", "medium"}
+        if v not in allowed:
+            raise ValueError(f"voice_model must be one of {sorted(allowed)}")
         return v
 
     @field_validator("public_base_url")

@@ -68,6 +68,18 @@ class RecurringArgs(_Args):
     remind_days: int = Field(default=2, ge=0, le=14, description="За сколько дней напомнить.")
 
 
+class GoalArgs(_Args):
+    title: str = Field(min_length=1, max_length=100, description="Название: «отпуск», «подушка безопасности».")
+    target: float = Field(gt=0, le=100_000_000, description="Сколько нужно накопить, в рублях.")
+    deadline: str | None = Field(default=None, description="К какой дате, YYYY-MM-DD; «к июню» — последний день мая или 1 июня по смыслу.")
+    saved: float = Field(default=0, ge=0, le=100_000_000, description="Уже отложено, в рублях.")
+
+
+class DepositArgs(_Args):
+    goal: str = Field(min_length=1, description="Название цели или её id.")
+    amount: float = Field(ge=-100_000_000, le=100_000_000, description="Сколько отложил, в рублях; минус — если забрал из копилки.")
+
+
 def finance_tools() -> list[Tool]:
     async def add(a: AddArgs, ctx: ToolContext) -> ToolOutcome:
         cats = await fs.categories(ctx.session)
@@ -97,6 +109,11 @@ def finance_tools() -> list[Tool]:
                 for c in sm["categories"]
             ],
             "ближайшие_платежи": [{"id": r["id"], "title": r["title"], "сумма": r["amount_text"], "дата": r["next_due"]} for r in sm["upcoming"]],
+            "цели": [
+                {"id": g["id"], "title": g["title"], "накоплено": fs.rub(g["saved"]), "цель": fs.rub(g["target"]), "процент": g["pct"],
+                 "срок": g["deadline"], "откладывать_в_месяц": fs.rub(g["per_month"]) if g["per_month"] else None, "достигнута": g["done"]}
+                for g in sm["goals"]
+            ],
         }
         return ToolOutcome(readable)
 
@@ -145,6 +162,20 @@ def finance_tools() -> list[Tool]:
             card=_card(f"оплачено: {r.title} {fs.rub(t.amount)}, следующий {r.next_due:%d.%m}"),
         )
 
+    async def goal_add(a: GoalArgs, ctx: ToolContext) -> ToolOutcome:
+        g = await fs.add_goal(ctx.session, title=a.title, target=_kop(a.target), deadline=_date(a.deadline, ctx) if a.deadline else None, saved=_kop(a.saved))
+        o = fs.goal_out(g, _today(ctx))
+        tail = f", откладывать {fs.rub(o['per_month'])} в месяц" if o["per_month"] else ""
+        when = f" к {g.deadline:%d.%m.%Y}" if g.deadline else ""
+        return ToolOutcome({"goal": o}, card=_card(f"цель «{g.title}»: {fs.rub(g.target)}{when}{tail}"))
+
+    async def goal_deposit(a: DepositArgs, ctx: ToolContext) -> ToolOutcome:
+        g = await fs.find_goal(ctx.session, a.goal)
+        reached = fs.deposit(g, _kop(a.amount))
+        o = fs.goal_out(g, _today(ctx))
+        text = f"«{g.title}»: {fs.rub(g.saved)} из {fs.rub(g.target)} ({o['pct']}%)" + (" — цель достигнута!" if reached else "")
+        return ToolOutcome({"goal": o, "reached": reached}, card=_card(text))
+
     return [
         Tool(
             "finance_add",
@@ -171,5 +202,19 @@ def finance_tools() -> list[Tool]:
             IdArgs,
             paid,
             "Отмечаю оплату…",
+        ),
+        Tool(
+            "finance_goal_add",
+            "Создать цель-копилку: «отпуск 150 000 к июню». Атлас посчитает, сколько откладывать в месяц.",
+            GoalArgs,
+            goal_add,
+            "Создаю цель…",
+        ),
+        Tool(
+            "finance_goal_deposit",
+            "Пополнить цель-копилку («отложил 10к на отпуск») или забрать из неё (минус). Это не расход и не доход.",
+            DepositArgs,
+            goal_deposit,
+            "Пополняю копилку…",
         ),
     ]

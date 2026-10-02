@@ -1,8 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, PiggyBank, Plus, Trash2, X } from "lucide-react";
+import { Donut, MonthBars } from "../components/FinCharts";
 import "../styles/finance.css";
 import { useStore } from "../lib/store";
-import { financeApi, fromIso, MONTHS, MONTHS_GEN, rub, type FinCategory, type FinRecurring, type FinSummary, type FinTx, type Parsed } from "../lib/modules";
+import {
+  financeApi,
+  fromIso,
+  MONTHS,
+  MONTHS_GEN,
+  rub,
+  type FinCategory,
+  type FinGoal,
+  type FinMonth,
+  type FinRecurring,
+  type FinSummary,
+  type FinTx,
+  type Parsed,
+} from "../lib/modules";
 
 type Tab = "overview" | "ops" | "setup";
 
@@ -57,7 +71,16 @@ export function FinancePage() {
             </div>
           )}
         </div>
-        {tab === "overview" && <Overview month={ym(month)} version={version} reload={reload} toast={toast} onSetup={() => setTab("setup")} />}
+        {tab === "overview" && (
+          <Overview
+            month={ym(month)}
+            version={version}
+            reload={reload}
+            toast={toast}
+            onSetup={() => setTab("setup")}
+            onPickMonth={(m) => setMonth(new Date(Number(m.slice(0, 4)), Number(m.slice(5)) - 1, 1))}
+          />
+        )}
         {tab === "ops" && <Operations month={ym(month)} version={version} reload={reload} toast={toast} />}
         {tab === "setup" && <Setup toast={toast} reload={reload} version={version} />}
       </div>
@@ -88,10 +111,27 @@ function Ring({ pct }: { pct: number }) {
   );
 }
 
-function Overview({ month, version, reload, toast, onSetup }: { month: string; version: number; reload: () => void; toast: Toast; onSetup: () => void }) {
+function Overview({
+  month,
+  version,
+  reload,
+  toast,
+  onSetup,
+  onPickMonth,
+}: {
+  month: string;
+  version: number;
+  reload: () => void;
+  toast: Toast;
+  onSetup: () => void;
+  onPickMonth: (m: string) => void;
+}) {
   const [s, setS] = useState<FinSummary | null>(null);
+  const [hist, setHist] = useState<FinMonth[]>([]);
+  const [pie, setPie] = useState<"expense" | "income">("expense");
   useEffect(() => {
     financeApi.summary(month).then(setS).catch((e) => toast((e as Error).message, "error"));
+    financeApi.history(month, 6).then(setHist).catch(() => undefined);
   }, [month, version, toast]);
   if (!s) return <p className="hint">Загружаю…</p>;
   const pct = s.budget ? s.expense / s.budget : 0;
@@ -135,6 +175,38 @@ function Overview({ month, version, reload, toast, onSetup }: { month: string; v
           <b>−{rub(s.expense)}</b>
         </div>
       </div>
+
+      <section className="surface fin-block">
+        <div className="fin-block-head">
+          <h2>Структура</h2>
+          <div className="segmented sm" role="tablist" aria-label="Что показать">
+            <button type="button" role="tab" aria-selected={pie === "expense"} onClick={() => setPie("expense")}>
+              Расходы
+            </button>
+            <button type="button" role="tab" aria-selected={pie === "income"} onClick={() => setPie("income")}>
+              Доходы
+            </button>
+          </div>
+        </div>
+        {(pie === "expense" ? s.expense_shares : s.income_shares).length === 0 ? (
+          <p className="hint">{pie === "expense" ? "Расходов в этом месяце нет." : "Доходов в этом месяце нет. Напишите Атласу «зарплата 150 000»."}</p>
+        ) : (
+          <Donut
+            rows={pie === "expense" ? s.expense_shares : s.income_shares}
+            total={pie === "expense" ? s.expense : s.income}
+            label={pie === "expense" ? "расходы" : "доходы"}
+          />
+        )}
+      </section>
+
+      {hist.some((h) => h.income || h.expense) && (
+        <section className="surface fin-block">
+          <h2>По месяцам</h2>
+          <MonthBars data={hist} current={month} onPick={onPickMonth} />
+        </section>
+      )}
+
+      <Goals goals={s.goals} reload={reload} toast={toast} />
 
       <section className="surface fin-block">
         <h2>Категории</h2>
@@ -194,6 +266,134 @@ function Overview({ month, version, reload, toast, onSetup }: { month: string; v
         ))}
       </section>
     </>
+  );
+}
+
+/* ================================================================ goals */
+
+function Goals({ goals, reload, toast }: { goals: FinGoal[]; reload: () => void; toast: Toast }) {
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ title: "", target: "", saved: "", deadline: "" });
+  const [depositFor, setDepositFor] = useState<number | null>(null);
+  const [amount, setAmount] = useState("");
+
+  const run = (p: Promise<unknown>, ok?: string) =>
+    p
+      .then((r) => {
+        const reached = (r as { reached?: boolean })?.reached;
+        if (reached) toast("Цель достигнута! 🎉", "info");
+        else if (ok) toast(ok, "info");
+        reload();
+      })
+      .catch((e) => toast((e as Error).message, "error"));
+
+  return (
+    <section className="surface fin-block">
+      <div className="fin-block-head">
+        <h2>Цели</h2>
+        {!adding && (
+          <button type="button" className="btn btn-sm" onClick={() => setAdding(true)}>
+            <Plus size={14} aria-hidden="true" /> Цель
+          </button>
+        )}
+      </div>
+      {goals.length === 0 && !adding && <p className="hint">Копилки на отпуск, технику, подушку безопасности. Можно сказать Атласу: «цель отпуск 150 000 к июню».</p>}
+      {goals.map((g) => (
+        <div key={g.id} className={`fin-goal ${g.done ? "done" : ""}`}>
+          <div className="fin-cat-row">
+            <span>
+              <PiggyBank size={15} aria-hidden="true" className="fin-goal-ic" />
+              <b>{g.title}</b>
+            </span>
+            <span className="fin-cat-sum">
+              {rub(g.saved)} / {rub(g.target)}
+            </span>
+          </div>
+          <div className="fin-bar" role="progressbar" aria-valuenow={g.pct} aria-valuemin={0} aria-valuemax={100} aria-label={g.title}>
+            <span style={{ width: `${g.pct}%`, background: g.done ? "var(--success)" : "var(--accent)" }} />
+          </div>
+          <span className="fin-k">
+            {g.done
+              ? "Достигнута ✓"
+              : [
+                  `${g.pct}%`,
+                  g.deadline ? `до ${dayLabel(g.deadline)} ${g.deadline.slice(0, 4)}` : "без срока",
+                  g.overdue ? "срок прошёл" : g.per_month ? `откладывать ${rub(g.per_month)} в месяц` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+          </span>
+          {depositFor === g.id ? (
+            <form
+              className="fin-add-row"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const neg = amount.trim().startsWith("-");
+                const kop = toKop(amount.replace("-", ""));
+                if (!kop) return;
+                run(financeApi.deposit(g.id, neg ? -kop : kop), neg ? "Забрали из копилки" : "Копилка пополнена");
+                setDepositFor(null);
+                setAmount("");
+              }}
+            >
+              <input className="input grow" autoFocus inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Сумма, ₽ (минус — забрать)" aria-label="Сумма" />
+              <button type="submit" className="btn btn-primary btn-sm" disabled={!toKop(amount.replace("-", ""))}>
+                OK
+              </button>
+              <button type="button" className="btn btn-sm" onClick={() => setDepositFor(null)}>
+                Отмена
+              </button>
+            </form>
+          ) : (
+            <div className="fin-goal-actions">
+              <button type="button" className="btn btn-sm" onClick={() => setDepositFor(g.id)}>
+                <Plus size={14} aria-hidden="true" /> Пополнить
+              </button>
+              <button
+                type="button"
+                className="icon-btn plain"
+                aria-label={`Удалить цель: ${g.title}`}
+                onClick={() => {
+                  if (window.confirm(`Удалить цель «${g.title}»?`)) run(financeApi.removeGoal(g.id), "Цель удалена");
+                }}
+              >
+                <Trash2 size={15} aria-hidden="true" />
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+      {adding && (
+        <form
+          className="fin-rec-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const target = toKop(form.target);
+            if (!form.title.trim() || !target) return toast("Нужны название и сумма", "error");
+            run(
+              financeApi.addGoal({ title: form.title.trim(), target, saved: toKop(form.saved), deadline: form.deadline || null }),
+              "Цель создана",
+            );
+            setForm({ title: "", target: "", saved: "", deadline: "" });
+            setAdding(false);
+          }}
+        >
+          <input className="input" autoFocus value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="На что копим (отпуск)" aria-label="Название цели" />
+          <input className="input" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} placeholder="Сколько нужно, ₽" inputMode="decimal" aria-label="Сумма цели" />
+          <input className="input" value={form.saved} onChange={(e) => setForm({ ...form, saved: e.target.value })} placeholder="Уже есть, ₽ (необязательно)" inputMode="decimal" aria-label="Уже накоплено" />
+          <label className="fin-inline">
+            К дате
+            <input className="input" type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+          </label>
+          <button type="submit" className="btn btn-primary">
+            <Check size={15} aria-hidden="true" /> Создать
+          </button>
+          <button type="button" className="btn" onClick={() => setAdding(false)}>
+            Отмена
+          </button>
+        </form>
+      )}
+    </section>
   );
 }
 

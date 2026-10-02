@@ -12,7 +12,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from app.api import auth, chat, content, finance, items, notifications
+from app.api import auth, chat, content, finance, items, notes, notifications
+from app.briefing import morning_brief, weather
 from app.channels.base import CompositeNotifier
 from app.channels.telegram import TelegramAPI, TelegramBot, TelegramNotifier
 from app.channels.web import WebNotifier
@@ -31,11 +32,14 @@ from app.events import EventBus
 from app.monitor.alerts import AlertManager
 from app.monitor.commands import CommandHandler
 from app.monitor.explain import Explainer
+from app.monitor.host import HostMonitor
 from app.monitor.messenger import Messenger
 from app.monitor.regular import RegularTasks
 from app.monitor.service import MonitorService
 from app.monitor.site import SiteClient
 from app.monitor.tools import monitor_tools
+from app.notes import service as notes_service
+from app.notes.tools import notes_tools
 from app.scheduler import ReminderScheduler
 from app.security import LoginRateLimiter, SecurityMiddleware
 from app.tools.builtin import build_registry
@@ -97,7 +101,8 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
         site = SiteClient(settings) if settings.monitoring_enabled else None
         monitor = MonitorService(db, settings, messenger, alerts, regular, site)
         extra_tools = monitor_tools(monitor, regular) if settings.monitoring_enabled else []
-        extra_tools += content_tools() + finance_tools()
+        extra_tools += content_tools() + finance_tools() + notes_tools()
+        host = HostMonitor(db, settings, messenger, alerts, telegram)
 
         st = app.state
         st.settings = settings
@@ -146,6 +151,16 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             for text in texts:
                 await messenger.send_content(text)
 
+        async def finance_weekly() -> None:
+            async with db.session() as s:
+                text = await finance_service.weekly_message(s, local_today())
+            if text:
+                await messenger.send(text, title="Финансы за неделю")
+
+        async def brief() -> None:
+            text = await morning_brief(db, settings, utcnow(), await weather(settings), leads_on=site is not None)
+            await messenger.send(text, title="Утро")
+
         async def payment_reminders() -> None:
             async with db.session() as s:
                 texts = await finance_service.due_reminders(s, local_today())
@@ -161,11 +176,42 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             if at:
                 hh, mm = (int(x) for x in at.split(":"))
                 scheduler.add_job(job, CronTrigger(hour=hh, minute=mm, timezone=settings.tz), job_id)
+        if settings.morning_brief_time:
+            hh, mm = (int(x) for x in settings.morning_brief_time.split(":"))
+            scheduler.add_job(brief, CronTrigger(hour=hh, minute=mm, timezone=settings.tz), "morning-brief")
+        if settings.finance_weekly_time:
+            hh, mm = (int(x) for x in settings.finance_weekly_time.split(":"))
+            scheduler.add_job(finance_weekly, CronTrigger(day_of_week=0, hour=hh, minute=mm, timezone=settings.tz), "finance-weekly")
+        hh, mm = (int(x) for x in settings.backup_weekly_time.split(":"))
+        scheduler.add_job(
+            host.weekly_archive,
+            CronTrigger(day_of_week=settings.backup_weekly_weekday, hour=hh, minute=mm, timezone=settings.tz),
+            "weekly-archive",
+        )
+        scheduler.add_job(host.check, IntervalTrigger(seconds=600), "host-check")
+        scheduler.add_job(host.stamp, IntervalTrigger(seconds=60), "alive-stamp")
+        await host.startup_notice()
         if settings.content_publish_remind_minutes:
             scheduler.add_job(content_publish_soon, IntervalTrigger(seconds=60), "content-publish-soon")
         bot = None
         if telegram:
-            bot = TelegramBot(telegram, settings, db, CommandHandler(db, monitor, regular, st.agent))
+            transcriber = None
+            if settings.voice_enabled:
+                from app.services.voice import Transcriber
+
+                transcriber = Transcriber(settings.voice_model, settings.data_dir / "models", settings.voice_threads)
+
+            async def save_forward(text: str, url: str) -> str:
+                async with db.session() as s:
+                    n = await notes_service.add_note(s, text=text, url=url, source="forward")
+                    if n.url and not n.title:
+                        n.title = await notes_service.fetch_title(n.url)
+                    await s.commit()
+                    return f"Сохранил в заметки: {notes_service.short(n)}\nНайти потом: «что я сохранял про …»"
+
+            bot = TelegramBot(
+                telegram, settings, db, CommandHandler(db, monitor, regular, st.agent), transcriber=transcriber, note_saver=save_forward
+            )
             bot.start()
         log.info(
             "Atlas started (llm=%s, model=%s, tz=%s, telegram=%s, monitoring=%s, leads bot=%s, mini app=%s)",
@@ -177,6 +223,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             "on" if leads_telegram else "off",
             "on" if settings.miniapp_url else "off",
         )
+        st.host = host
         try:
             yield
         finally:
@@ -195,7 +242,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
     app = FastAPI(title="Atlas", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(SecurityMiddleware, settings=settings)
 
-    for r in (auth.router, chat.router, items.router, notifications.router, content.router, finance.router):
+    for r in (auth.router, chat.router, items.router, notifications.router, content.router, finance.router, notes.router):
         app.include_router(r)
 
     @app.api_route("/api/health", methods=["GET", "HEAD"])

@@ -15,6 +15,7 @@ import { ShowcasePage } from "./pages/ShowcasePage";
 
 const ContentPage = lazy(() => import("./pages/ContentPage"));
 const FinancePage = lazy(() => import("./pages/FinancePage"));
+const NotesPage = lazy(() => import("./pages/NotesPage"));
 
 async function showSystemNotification(title: string, body: string, url: string) {
   if (!("Notification" in window) || Notification.permission !== "granted") return false;
@@ -60,6 +61,7 @@ const TITLES: Record<string, string> = {
   settings: "Настройки",
   finance: "Финансы",
   content: "Контент-план",
+  notes: "Заметки",
   showcase: "Витрина",
 };
 
@@ -245,6 +247,11 @@ export function App() {
           {route.name === "finance" && (
             <Suspense fallback={<p className="hint" style={{ padding: 24 }}>Загружаю…</p>}>
               <FinancePage />
+            </Suspense>
+          )}
+          {route.name === "notes" && (
+            <Suspense fallback={<p className="hint" style={{ padding: 24 }}>Загружаю…</p>}>
+              <NotesPage />
             </Suspense>
           )}
           <BottomNav />

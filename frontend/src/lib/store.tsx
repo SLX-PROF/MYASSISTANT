@@ -13,6 +13,7 @@ export type Route =
   | { name: "settings" }
   | { name: "finance" }
   | { name: "content" }
+  | { name: "notes" }
   | { name: "showcase" };
 
 export function parseRoute(path: string): Route {
@@ -31,6 +32,8 @@ export function parseRoute(path: string): Route {
       return { name: "finance" };
     case "/content":
       return { name: "content" };
+    case "/notes":
+      return { name: "notes" };
     case "/showcase":
       return { name: "showcase" };
     default:

@@ -159,6 +159,11 @@ pytest -q
 | `TOTP_SECRET` | второй фактор входа (`scripts/totp_setup.py`) | — |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS` | бот и разрешённые chat ID | — |
 | `SITE_BASE_URL` … `HEARTBEAT_URL` | дежурство по сайту, см. `.env.example` | выключено |
+| `MORNING_BRIEF_TIME`, `WEATHER_*` | утренний брифинг и погода (Open-Meteo) | `08:30`, Москва |
+| `FINANCE_WEEKLY_TIME` | сводка финансов за неделю, утро понедельника | `09:05` |
+| `VOICE_ENABLED`, `VOICE_MODEL` | голосовые в Telegram, распознаются на сервере | `true`, `small` |
+| `BACKUP_WEEKLY_*`, `BACKUP_TO_TELEGRAM` | еженедельный архив базы и фото, копия в Telegram | вс 04:30, `true` |
+| `DISK_MIN_FREE_PERCENT`, `MEMORY_MIN_FREE_PERCENT` | порог предупреждения о месте и памяти сервера | `10`, `8` |
 
 ---
 

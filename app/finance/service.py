@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import FinCategory, FinRecurring, FinTransaction
+from app.db.models import FinCategory, FinGoal, FinRecurring, FinTransaction, utcnow
 from app.services import kv
 
 
@@ -22,19 +22,20 @@ class FinanceError(ValueError):
 
 
 DEFAULT_CATEGORIES = [
-    # name, kind, color, keywords
-    ("Продукты", "expense", "#fbbf24", "продукт,магазин,пятёрочк,пятерочк,перекрёст,перекрест,вкусвилл,ашан,лента,магнит,самокат,еда"),
-    ("Кафе и рестораны", "expense", "#fb7185", "кофе,кафе,ресторан,обед,ужин,завтрак,бар,доставк,шаурм,пицц,суши"),
-    ("Транспорт", "expense", "#22d3ee", "такси,метро,бензин,заправк,парковк,каршеринг,автобус,электричк,самолёт,самолет,поезд"),
-    ("Дом и связь", "expense", "#60a5fa", "аренд,квартир,жкх,коммунал,интернет,связь,телефон,мобильн"),
-    ("Подписки и сервисы", "expense", "#a78bfa", "подписк,netflix,spotify,плюс,кинопоиск,icloud,claude,chatgpt,хостинг,сервер,vpn"),
-    ("Здоровье", "expense", "#34d399", "аптек,врач,анализ,стоматолог,лекарств,клиник"),
-    ("Красота и одежда", "expense", "#f472b6", "одежд,обув,стрижк,маникюр,косметик,барбер"),
-    ("Развлечения", "expense", "#f97316", "кино,концерт,игр,театр,развлечен,музей"),
-    ("Подарки", "expense", "#e879f9", "подар,цвет"),
+    # name, kind, color, keywords. Colors: a validated categorical palette
+    # (neighbours stay distinguishable, also with color blindness).
+    ("Продукты", "expense", "#c98500", "продукт,магазин,пятёрочк,пятерочк,перекрёст,перекрест,вкусвилл,ашан,лента,магнит,самокат,еда"),
+    ("Кафе и рестораны", "expense", "#d95926", "кофе,кафе,ресторан,обед,ужин,завтрак,бар,доставк,шаурм,пицц,суши"),
+    ("Транспорт", "expense", "#3987e5", "такси,метро,бензин,заправк,парковк,каршеринг,автобус,электричк,самолёт,самолет,поезд"),
+    ("Дом и связь", "expense", "#9085e9", "аренд,квартир,жкх,коммунал,интернет,связь,телефон,мобильн"),
+    ("Подписки и сервисы", "expense", "#d55181", "подписк,netflix,spotify,плюс,кинопоиск,icloud,claude,chatgpt,хостинг,сервер,vpn"),
+    ("Здоровье", "expense", "#199e70", "аптек,врач,анализ,стоматолог,лекарств,клиник"),
+    ("Красота и одежда", "expense", "#e66767", "одежд,обув,стрижк,маникюр,косметик,барбер"),
+    ("Развлечения", "expense", "#008300", "кино,концерт,игр,театр,развлечен,музей"),
+    ("Подарки", "expense", "#199e70", "подар,цвет"),
     ("Другое", "expense", "#94a3b8", ""),
-    ("Зарплата", "income", "#5eead4", "зарплат,аванс,зп,премия"),
-    ("Другие доходы", "income", "#86efac", "доход,кэшбэк,кешбэк,фриланс,продал,продаж,вернули,возврат"),
+    ("Зарплата", "income", "#3987e5", "зарплат,аванс,зп,премия"),
+    ("Другие доходы", "income", "#199e70", "доход,кэшбэк,кешбэк,фриланс,продал,продаж,вернули,возврат"),
 ]
 
 INCOME_WORDS = ("зарплат", "аванс", "доход", "получил", "пришл", "кэшбэк", "кешбэк", "премия", "вернули", "возврат", "продал")
@@ -221,13 +222,44 @@ async def transactions(s: AsyncSession, start: date, end: date, category_id: int
     return list((await s.scalars(q.order_by(FinTransaction.day.desc(), FinTransaction.id.desc()).limit(limit))).all())
 
 
-async def spent_by_category(s: AsyncSession, start: date, end: date) -> dict[int | None, int]:
+async def spent_by_category(s: AsyncSession, start: date, end: date, kind: str = "expense") -> dict[int | None, int]:
     rows = await s.execute(
         select(FinTransaction.category_id, func.sum(FinTransaction.amount))
-        .where(FinTransaction.day >= start, FinTransaction.day <= end, FinTransaction.kind == "expense")
+        .where(FinTransaction.day >= start, FinTransaction.day <= end, FinTransaction.kind == kind)
         .group_by(FinTransaction.category_id)
     )
     return {cid: int(total or 0) for cid, total in rows.all()}
+
+
+def _share_rows(totals: dict[int | None, int], cats: list[FinCategory], kind: str) -> list[dict]:
+    """Rows for the pie chart: every category with money in it, largest first."""
+    by_id = {c.id: c for c in cats}
+    rows = []
+    for cid, v in totals.items():
+        if not v:
+            continue
+        c = by_id.get(cid) if cid else None
+        rows.append({"id": cid, "name": c.name if c else "Без категории", "color": c.color if c else "#94a3b8", "amount": v})
+    rows.sort(key=lambda r: -r["amount"])
+    return rows
+
+
+async def history(s: AsyncSession, ym: str, months: int = 6) -> list[dict]:
+    """Income and expense per month for the `months` months ending with `ym`."""
+    start, _ = month_bounds(ym)
+    first = add_months(start, -(months - 1), 1)
+    rows = await s.execute(
+        select(func.strftime("%Y-%m", FinTransaction.day), FinTransaction.kind, func.sum(FinTransaction.amount))
+        .where(FinTransaction.day >= first, FinTransaction.day <= month_bounds(ym)[1])
+        .group_by(func.strftime("%Y-%m", FinTransaction.day), FinTransaction.kind)
+    )
+    totals: dict[tuple[str, str], int] = {(m, k): int(v or 0) for m, k, v in rows.all()}
+    out = []
+    for i in range(months):
+        m = f"{add_months(first, i, 1):%Y-%m}"
+        inc, exp = totals.get((m, "income"), 0), totals.get((m, "expense"), 0)
+        out.append({"month": m, "income": inc, "expense": exp, "net": inc - exp})
+    return out
 
 
 async def summary(s: AsyncSession, ym: str, today: date) -> dict:
@@ -257,6 +289,7 @@ async def summary(s: AsyncSession, ym: str, today: date) -> dict:
     if spent.get(None):
         cat_rows.append({"id": None, "name": "Без категории", "color": "#94a3b8", "spent": spent[None], "limit": 0})
     cat_rows.sort(key=lambda r: -r["spent"])
+    income_by_cat = await spent_by_category(s, start, end, "income")
     upcoming = [
         recurring_out(r, {c.id: c for c in cats})
         for r in await s.scalars(
@@ -268,6 +301,8 @@ async def summary(s: AsyncSession, ym: str, today: date) -> dict:
     return {
         "month": ym, "income": income, "expense": expense, "budget": budget, "remaining": remaining,
         "per_day": per_day, "days_left": days_left, "categories": cat_rows, "upcoming": upcoming,
+        "expense_shares": _share_rows(spent, cats, "expense"), "income_shares": _share_rows(income_by_cat, cats, "income"),
+        "goals": [goal_out(g, today) for g in await goals(s)],
     }  # fmt: skip
 
 
@@ -336,3 +371,113 @@ async def due_reminders(s: AsyncSession, today: date) -> list[str]:
             f"Оплатили — напишите «{r.title.lower()} оплачен» или нажмите в разделе «Финансы»."
         )
     return out
+
+
+# -------------------------------------------------------------------- goals
+
+
+def months_between(today: date, deadline: date) -> int:
+    """Whole months left to save, counting the current one (at least 1)."""
+    return max(1, (deadline.year - today.year) * 12 + deadline.month - today.month + (1 if deadline.day >= today.day else 0))
+
+
+def goal_out(g: FinGoal, today: date) -> dict:
+    left = max(0, g.target - g.saved)
+    per_month = 0
+    if g.deadline and left and not g.done_at:
+        per_month = -(-left // months_between(today, g.deadline)) if g.deadline >= today else left
+    return {
+        "id": g.id, "title": g.title, "target": g.target, "saved": g.saved, "left": left,
+        "pct": round(min(g.saved / g.target, 1) * 100) if g.target else 0,
+        "deadline": g.deadline.isoformat() if g.deadline else None, "color": g.color,
+        "per_month": per_month, "overdue": bool(g.deadline and g.deadline < today and left), "done": bool(g.done_at),
+    }  # fmt: skip
+
+
+async def goals(s: AsyncSession, include_done: bool = True) -> list[FinGoal]:
+    q = select(FinGoal).order_by(FinGoal.done_at.is_not(None), FinGoal.deadline.is_(None), FinGoal.deadline, FinGoal.id)
+    if not include_done:
+        q = q.where(FinGoal.done_at.is_(None))
+    return list((await s.scalars(q)).all())
+
+
+async def find_goal(s: AsyncSession, ref: str | int) -> FinGoal:
+    if isinstance(ref, int) or str(ref).isdigit():
+        g = await s.get(FinGoal, int(ref))
+    else:
+        low = str(ref).strip().casefold()
+        rows = await goals(s)
+        g = next((x for x in rows if x.title.casefold() == low), None) or next((x for x in rows if low in x.title.casefold()), None)
+    if g is None:
+        raise FinanceError(f"Нет цели «{ref}».")
+    return g
+
+
+async def add_goal(s: AsyncSession, *, title: str, target: int, deadline: date | None, saved: int = 0, color: str = "#5eead4") -> FinGoal:
+    if target <= 0:
+        raise FinanceError("Сумма цели должна быть больше нуля.")
+    g = FinGoal(title=title.strip()[:100], target=target, saved=max(0, saved), deadline=deadline, color=color)
+    if g.saved >= g.target:
+        g.done_at = utcnow()
+    s.add(g)
+    await s.flush()
+    return g
+
+
+def deposit(g: FinGoal, amount: int) -> bool:
+    """Add (or with a negative amount take back) money; returns True when the goal is reached now."""
+    was_done = g.done_at is not None
+    g.saved = max(0, g.saved + amount)
+    if g.saved >= g.target and not was_done:
+        g.done_at = utcnow()
+        return True
+    if g.saved < g.target:
+        g.done_at = None
+    return False
+
+
+# ------------------------------------------------------------ weekly digest
+
+
+async def weekly_message(s: AsyncSession, today: date) -> str | None:
+    """Monday morning: how the past week (Mon-Sun) went, and what is coming."""
+    week_end = today - timedelta(days=today.weekday() + 1)  # last Sunday
+    week_start = week_end - timedelta(days=6)
+    prev_start, prev_end = week_start - timedelta(days=7), week_start - timedelta(days=1)
+    cats = await categories(s)
+    by_id = {c.id: c for c in cats}
+    spent = await spent_by_category(s, week_start, week_end)
+    total = sum(spent.values())
+    prev = sum((await spent_by_category(s, prev_start, prev_end)).values())
+    income = sum((await spent_by_category(s, week_start, week_end, "income")).values())
+    sm = await summary(s, f"{today:%Y-%m}", today)
+    active_goals = [g for g in await goals(s, include_done=False)]
+    if not total and not income and not sm["upcoming"] and not active_goals:
+        return None
+    lines = [f"Финансы за неделю {week_start:%d.%m}–{week_end:%d.%m}"]
+    line = f"Расходы: {rub(total)}"
+    if prev:
+        diff = (total - prev) * 100 // prev
+        line += f" ({'+' if diff > 0 else ''}{diff}% к прошлой неделе)" if diff else " (как на прошлой неделе)"
+    lines.append(line)
+    if income:
+        lines.append(f"Доходы: {rub(income)}")
+    top = sorted(((v, cid) for cid, v in spent.items() if v), reverse=True)[:3]
+    if top:
+        lines.append("Больше всего: " + ", ".join(f"{by_id[cid].name if cid in by_id else 'без категории'} {rub(v)}" for v, cid in top))
+    over = [c for c in sm["categories"] if c["limit"] and c["spent"] > c["limit"]]
+    if over:
+        lines.append("Перерасход в месяце: " + ", ".join(f"{c['name']} (+{rub(c['spent'] - c['limit'])})" for c in over))
+    if sm["budget"]:
+        if sm["remaining"] > 0:
+            lines.append(f"До конца месяца осталось {rub(sm['remaining'])}" + (f", это {rub(sm['per_day'])} в день" if sm["per_day"] else ""))
+        else:
+            lines.append(f"Бюджет месяца превышен на {rub(-sm['remaining'])}")
+    soon = [r for r in sm["upcoming"] if date.fromisoformat(r["next_due"]) <= today + timedelta(days=6)]
+    if soon:
+        lines.append("Платежи на этой неделе: " + ", ".join(f"{r['title']} {r['amount_text']} ({date.fromisoformat(r['next_due']):%d.%m})" for r in soon))
+    for g in active_goals[:3]:
+        o = goal_out(g, today)
+        tail = f", откладывать {rub(o['per_month'])} в месяц" if o["per_month"] else ""
+        lines.append(f"Цель «{g.title}»: {o['pct']}% ({rub(g.saved)} из {rub(g.target)}){tail}")
+    return "\n".join(lines)

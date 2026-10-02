@@ -70,6 +70,24 @@ export type FinSummary = {
   days_left: number;
   categories: { id: number | null; name: string; color: string; spent: number; limit: number }[];
   upcoming: FinRecurring[];
+  expense_shares: FinShare[];
+  income_shares: FinShare[];
+  goals: FinGoal[];
+};
+export type FinShare = { id: number | null; name: string; color: string; amount: number };
+export type FinMonth = { month: string; income: number; expense: number; net: number };
+export type FinGoal = {
+  id: number;
+  title: string;
+  target: number;
+  saved: number;
+  left: number;
+  pct: number;
+  deadline: string | null;
+  color: string;
+  per_month: number;
+  overdue: boolean;
+  done: boolean;
 };
 export type Parsed = { amount: number; amount_text: string; kind: "expense" | "income"; day: string; note: string; category_id: number | null; category: string | null };
 
@@ -89,6 +107,21 @@ export const financeApi = {
   updateRecurring: (id: number, r: Partial<FinRecurring>) => request<FinRecurring>("PATCH", `/api/finance/recurring/${id}`, r),
   removeRecurring: (id: number) => request<{ ok: boolean }>("DELETE", `/api/finance/recurring/${id}`),
   paid: (id: number) => request<{ recurring: FinRecurring; transaction: FinTx }>("POST", `/api/finance/recurring/${id}/paid`),
+  history: (month: string, months = 6) => request<FinMonth[]>("GET", `/api/finance/history?month=${month}&months=${months}`),
+  addGoal: (g: { title: string; target: number; saved: number; deadline: string | null }) => request<FinGoal>("POST", "/api/finance/goals", g),
+  updateGoal: (id: number, g: { title?: string; target?: number; deadline?: string | null }) => request<FinGoal>("PATCH", `/api/finance/goals/${id}`, g),
+  deposit: (id: number, amount: number) => request<FinGoal & { reached: boolean }>("POST", `/api/finance/goals/${id}/deposit`, { amount }),
+  removeGoal: (id: number) => request<{ ok: boolean }>("DELETE", `/api/finance/goals/${id}`),
+};
+
+/* -------------------------------------------------------------- notes */
+
+export type Note = { id: number; text: string; url: string; title: string; tags: string[]; source: string; created_at: string };
+
+export const notesApi = {
+  list: (q = "") => request<Note[]>("GET", `/api/notes${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`),
+  add: (n: { text: string; url?: string; tags?: string }) => request<Note>("POST", "/api/notes", n),
+  remove: (id: number) => request<{ ok: boolean }>("DELETE", `/api/notes/${id}`),
 };
 
 /* -------------------------------------------------------------- dates */

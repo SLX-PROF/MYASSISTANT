@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlarmClock, Brain, CalendarHeart, Ellipsis, ListChecks, MessageSquare, Plus, Search, Settings, Wallet, X } from "lucide-react";
+import { AlarmClock, Brain, CalendarHeart, Ellipsis, Lightbulb, ListChecks, MessageSquare, Plus, Search, Settings, Wallet, X } from "lucide-react";
 import { useStore, type Route } from "../lib/store";
 import { Orb } from "./Orb";
 
@@ -15,6 +15,7 @@ export function Sidebar() {
     { r: { name: "reminders" }, label: "Напоминания", icon: <AlarmClock size={17} aria-hidden="true" /> },
     { r: { name: "finance" }, label: "Финансы", icon: <Wallet size={17} aria-hidden="true" /> },
     { r: { name: "content" }, label: "Контент-план", icon: <CalendarHeart size={17} aria-hidden="true" /> },
+    { r: { name: "notes" }, label: "Заметки", icon: <Lightbulb size={17} aria-hidden="true" /> },
     { r: { name: "memory" }, label: "Память", icon: <Brain size={17} aria-hidden="true" /> },
     { r: { name: "settings" }, label: "Настройки", icon: <Settings size={17} aria-hidden="true" /> },
   ];
@@ -122,6 +123,7 @@ export function CommandPalette() {
       { key: "reminders", label: "Напоминания", icon: <AlarmClock size={16} />, go: { name: "reminders" }, group: "Разделы" },
       { key: "finance", label: "Финансы", icon: <Wallet size={16} />, go: { name: "finance" }, group: "Разделы" },
       { key: "content", label: "Контент-план", icon: <CalendarHeart size={16} />, go: { name: "content" }, group: "Разделы" },
+      { key: "notes", label: "Заметки", icon: <Lightbulb size={16} />, go: { name: "notes" }, group: "Разделы" },
       { key: "memory", label: "Память", icon: <Brain size={16} />, go: { name: "memory" }, group: "Разделы" },
       { key: "settings", label: "Настройки", icon: <Settings size={16} />, go: { name: "settings" }, group: "Разделы" },
     ];

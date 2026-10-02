@@ -164,6 +164,22 @@ sudo systemctl reload caddy
 
 Фото-референсы контент-плана лежат в том же томе, в `/data/media/content`. Забрать их к себе: `docker compose cp atlas:/data/media ./media`.
 
+**Еженедельный архив.** По воскресеньям в 04:30 Атлас собирает архив: база вместе с фото (`/data/backups/weekly`, хранятся 6 последних). Архив приходит вам в Telegram файлом, так копия есть и вне сервера. Если архив больше 50 МБ, в Telegram уходит только база, а полный архив остаётся на сервере. Отключить отправку можно так: `BACKUP_TO_TELEGRAM=false`. Сделать архив вручную:
+
+```bash
+docker compose exec atlas python scripts/backup_archive.py
+```
+
+Восстановление из архива:
+
+```bash
+docker compose stop atlas
+tar -xzf atlas-ДАТА.tar.gz          # появятся atlas.db и media/
+docker compose cp atlas.db atlas:/data/atlas.db
+docker compose cp media atlas:/data/
+docker compose start atlas
+```
+
 Атлас сам делает копию базы каждую ночь в 04:15 (хранятся 14 последних, папка `/data/backups`). Сделать копию вручную:
 
 ```bash
@@ -171,6 +187,15 @@ docker compose exec atlas python scripts/backup_db.py
 ```
 
 Забрать копии на свой компьютер: `scp -r atlas@IP:/var/lib/docker/volumes/atlas_atlas-data/_data/backups ./` (нужен sudo на сервере). Проще так: `docker compose cp atlas:/data/backups ./backups` на сервере, затем `scp`.
+
+## 6а. Если сервер упал
+
+Сам себя упавший сервер предупредить не может, поэтому защита двухслойная:
+
+1. **После перезапуска** Атлас сам пишет, сколько он был недоступен.
+2. **Внешний сторож.** Заведите бесплатную проверку на healthchecks.io: Period 5 минут, Grace 10 минут. В Integrations подключите Telegram. Скопируйте ping-адрес проверки в `.env` строкой `HEARTBEAT_URL=https://hc-ping.com/...` и пересоздайте контейнер. Атлас пингует этот адрес каждые 5 минут. Если пинги прекратятся, healthchecks напишет вам в Telegram.
+
+Кроме того, каждые 10 минут Атлас проверяет свободное место на диске и память. Если места или памяти меньше порога (`DISK_MIN_FREE_PERCENT`, `MEMORY_MIN_FREE_PERCENT`), придёт предупреждение.
 
 ## 7. Обновление
 

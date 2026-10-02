@@ -1499,3 +1499,13 @@ a {
     scroll-behavior: auto !important;
   }
 }
+
+/* Notes */
+.note-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.list-item .meta a {
+  color: var(--accent);
+  text-decoration: none;
+}
