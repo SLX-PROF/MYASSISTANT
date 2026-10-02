@@ -185,6 +185,8 @@ def card_line(card: dict, tz) -> str | None:
     if t == "task":
         due = fmt(card.get("due_at"))[:10] if card.get("due_at") else "без срока"
         return f"[задача] {card['title']} — {due}" + (" (выполнена)" if card.get("status") == "done" else "")
+    if t in ("content", "finance"):
+        return f"[{'контент' if t == 'content' else 'финансы'}] {card['text']}"
     if t == "fact":
         return f"[память] {card['text']}"
     if t == "reminder_list":

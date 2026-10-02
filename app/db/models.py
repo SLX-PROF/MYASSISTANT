@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, TypeDecorator
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, TypeDecorator
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -222,3 +222,84 @@ class AuthSession(Base):
     expires_at: Mapped[datetime] = mapped_column(index=True)
     last_seen_at: Mapped[datetime] = mapped_column(default=utcnow)
     user_agent: Mapped[str] = mapped_column(String(200), default="")
+
+
+# ------------------------------------------------------------ content plan
+
+
+class ContentItem(Base):
+    """One planned post/video. day=None means it sits in the idea bank."""
+
+    __tablename__ = "content_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    day: Mapped[date | None] = mapped_column(Date, default=None, index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    title: Mapped[str] = mapped_column(String(200))
+    rubric: Mapped[str] = mapped_column(String(30), default="")
+    icon: Mapped[str] = mapped_column(String(20), default="sparkles")
+    stage: Mapped[str] = mapped_column(String(20), default="idea")  # idea|script|filmed|published
+    publish_time: Mapped[str] = mapped_column(String(5), default="")  # HH:MM
+    hook: Mapped[str] = mapped_column(String(300), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class ContentRef(Base):
+    """A reference attached to a content item: a link or an uploaded photo."""
+
+    __tablename__ = "content_refs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("content_items.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(10))  # link | photo
+    url: Mapped[str] = mapped_column(String(1000), default="")
+    file: Mapped[str] = mapped_column(String(100), default="")  # stored photo name under data/media/content
+    caption: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+# ---------------------------------------------------------------- finance
+
+
+class FinCategory(Base):
+    __tablename__ = "fin_categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40), unique=True)
+    kind: Mapped[str] = mapped_column(String(10), default="expense")  # expense | income
+    monthly_limit: Mapped[int] = mapped_column(Integer, default=0)  # rubles, 0 = no limit
+    color: Mapped[str] = mapped_column(String(9), default="#22d3ee")
+    keywords: Mapped[str] = mapped_column(Text, default="")  # comma separated, for quick input
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class FinTransaction(Base):
+    __tablename__ = "fin_transactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    amount: Mapped[int] = mapped_column(Integer)  # kopecks, always positive
+    kind: Mapped[str] = mapped_column(String(10), default="expense")
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("fin_categories.id", ondelete="SET NULL"), default=None, index=True)
+    note: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class FinRecurring(Base):
+    """A regular payment (rent, subscriptions) with a reminder before the due date."""
+
+    __tablename__ = "fin_recurring"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(100))
+    amount: Mapped[int] = mapped_column(Integer)  # kopecks
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("fin_categories.id", ondelete="SET NULL"), default=None)
+    day_of_month: Mapped[int] = mapped_column(Integer, default=1)
+    interval_months: Mapped[int] = mapped_column(Integer, default=1)
+    next_due: Mapped[date] = mapped_column(Date, index=True)
+    remind_days: Mapped[int] = mapped_column(Integer, default=2)
+    reminded_for: Mapped[date | None] = mapped_column(Date, default=None)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)

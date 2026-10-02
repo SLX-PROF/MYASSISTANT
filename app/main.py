@@ -9,15 +9,22 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.api import auth, chat, items, notifications
+from apscheduler.triggers.cron import CronTrigger
+
+from app.api import auth, chat, content, finance, items, notifications
 from app.channels.base import CompositeNotifier
 from app.channels.telegram import TelegramAPI, TelegramBot, TelegramNotifier
 from app.channels.web import WebNotifier
 from app.config import Settings, get_settings
+from app.content import service as content_service
+from app.content.tools import content_tools
+from app.finance import service as finance_service
+from app.finance.tools import finance_tools
 from app.core.agent import Agent
 from app.core.llm import create_provider
 from app.core.llm.base import LLMError, LLMProvider
 from app.core.llm.fake import FakeProvider
+from app.db.models import utcnow
 from app.db.session import Database, migrate
 from app.events import EventBus
 from app.monitor.alerts import AlertManager
@@ -89,6 +96,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
         site = SiteClient(settings) if settings.monitoring_enabled else None
         monitor = MonitorService(db, settings, messenger, alerts, regular, site)
         extra_tools = monitor_tools(monitor, regular) if settings.monitoring_enabled else []
+        extra_tools += content_tools() + finance_tools()
 
         st = app.state
         st.settings = settings
@@ -111,6 +119,33 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             if skipped:
                 log.info("regular tasks skipped (not configured): %s", ", ".join(skipped))
         monitor.register_jobs(scheduler.add_job)
+        async with db.session() as s:
+            await finance_service.ensure_defaults(s)
+            await s.commit()
+
+        def local_today():
+            return utcnow().astimezone(settings.tz).date()
+
+        async def content_nudge() -> None:
+            async with db.session() as s:
+                text = await content_service.today_message(s, local_today())
+            if text:
+                await messenger.send(text, title="Контент-план")
+
+        async def payment_reminders() -> None:
+            async with db.session() as s:
+                texts = await finance_service.due_reminders(s, local_today())
+                await s.commit()
+            for text in texts:
+                await messenger.send(text, title="Платёж")
+
+        for job, at, job_id in (
+            (content_nudge, settings.content_reminder_time, "content-nudge"),
+            (payment_reminders, settings.finance_reminder_time, "payment-reminders"),
+        ):
+            if at:
+                hh, mm = (int(x) for x in at.split(":"))
+                scheduler.add_job(job, CronTrigger(hour=hh, minute=mm, timezone=settings.tz), job_id)
         bot = None
         if telegram:
             bot = TelegramBot(telegram, settings, db, CommandHandler(db, monitor, regular, st.agent))
@@ -143,7 +178,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
     app = FastAPI(title="Atlas", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(SecurityMiddleware, settings=settings)
 
-    for r in (auth.router, chat.router, items.router, notifications.router):
+    for r in (auth.router, chat.router, items.router, notifications.router, content.router, finance.router):
         app.include_router(r)
 
     @app.api_route("/api/health", methods=["GET", "HEAD"])

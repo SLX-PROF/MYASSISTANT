@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     leads_telegram_bot_token: SecretStr = SecretStr("")
     leads_telegram_chat_ids: str = ""  # comma separated; may include people without access to the assistant
 
+    # --- Content calendar and finances -----------------------------------
+    # Daily "today in the content plan" message and payment reminders (HH:MM, empty = off).
+    content_reminder_time: str = "10:00"
+    finance_reminder_time: str = "10:05"
+
     # --- Site monitoring (empty SITE_BASE_URL = monitoring off) ------------
     site_base_url: str = ""
     site_feed_key: SecretStr = SecretStr("")
@@ -124,6 +129,16 @@ class Settings(BaseSettings):
         v = v.strip()
         if v and not v.startswith("https://"):
             raise ValueError("TELEGRAM_MINIAPP_URL must start with https:// (Telegram requires HTTPS)")
+        return v
+
+    @field_validator("content_reminder_time", "finance_reminder_time", "weekly_summary_time")
+    @classmethod
+    def _valid_hhmm(cls, v: str) -> str:
+        v = v.strip()
+        if v:
+            hh, mm = (int(x) for x in v.split(":"))
+            if not (0 <= hh < 24 and 0 <= mm < 60):
+                raise ValueError("expected HH:MM")
         return v
 
     @field_validator("llm_effort")
