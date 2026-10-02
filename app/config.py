@@ -73,10 +73,14 @@ class Settings(BaseSettings):
     # Address of the Atlas web UI that the bot opens as a Telegram Mini App,
     # e.g. https://s1824923.tailXXXX.ts.net/ (reachable only with Tailscale on).
     telegram_miniapp_url: str = ""
-    # Optional second bot that only delivers new site leads (send-only, no commands).
-    # Empty = leads go through the main bot like everything else.
+    # Work bot for the Forbsa site: new leads, site alerts, weekly lead report,
+    # regular site chores and the work commands (/status, /leads, /due, ...).
+    # The main bot then stays personal. Empty = everything goes through the main bot.
+    work_telegram_bot_token: SecretStr = SecretStr("")
+    work_telegram_chat_ids: str = ""  # comma separated
+    # Older names of the same settings (still accepted).
     leads_telegram_bot_token: SecretStr = SecretStr("")
-    leads_telegram_chat_ids: str = ""  # comma separated; may include people without access to the assistant
+    leads_telegram_chat_ids: str = ""
 
     # --- Content calendar and finances -----------------------------------
     # Daily "today in the content plan" message and payment reminders (HH:MM, empty = off).
@@ -273,12 +277,25 @@ class Settings(BaseSettings):
         return {d.strip().lower().lstrip("@") for d in self.mail_exclude.split(",") if d.strip()}
 
     @property
+    def work_token(self) -> str:
+        return (self.work_telegram_bot_token.get_secret_value() or self.leads_telegram_bot_token.get_secret_value()).strip()
+
+    @property
+    def work_chat_ids(self) -> set[int]:
+        return _chat_ids(self.work_telegram_chat_ids or self.leads_telegram_chat_ids)
+
+    @property
+    def work_bot_enabled(self) -> bool:
+        return bool(self.work_token and self.work_chat_ids)
+
+    # older names
+    @property
     def leads_chat_ids(self) -> set[int]:
-        return _chat_ids(self.leads_telegram_chat_ids)
+        return self.work_chat_ids
 
     @property
     def leads_bot_enabled(self) -> bool:
-        return bool(self.leads_telegram_bot_token.get_secret_value() and self.leads_chat_ids)
+        return self.work_bot_enabled
 
     @property
     def telegram_enabled(self) -> bool:

@@ -1,6 +1,6 @@
 """Morning brief: one Telegram message with the day ahead.
 
-Today's tasks and reminders, payments soon, new site leads, the month's
+Personal only: today's tasks and reminders, payments soon, the month's
 budget and the weather (Open-Meteo, free, no key; only the city coordinates
 are sent).
 """
@@ -11,10 +11,10 @@ import logging
 from datetime import date, datetime, time, timedelta
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from app.config import Settings
-from app.db.models import Lead, Reminder, Task
+from app.db.models import Reminder, Task
 from app.db.session import Database
 from app.finance import service as fs
 from app.services.timeparse import RU_WEEKDAYS
@@ -76,7 +76,7 @@ def _hhmm(dt: datetime, tz) -> str:
     return dt.astimezone(tz).strftime("%H:%M")
 
 
-async def morning_brief(db: Database, settings: Settings, now: datetime, weather_text: str = "", leads_on: bool = False) -> str:
+async def morning_brief(db: Database, settings: Settings, now: datetime, weather_text: str = "") -> str:
     tz = settings.tz
     today = now.astimezone(tz).date()
     day_start = datetime.combine(today, time.min, tz)
@@ -98,9 +98,6 @@ async def morning_brief(db: Database, settings: Settings, now: datetime, weather
             )
         ).all()
         sm = await fs.summary(s, f"{today:%Y-%m}", today)
-        leads = 0
-        if leads_on:
-            leads = await s.scalar(select(func.count()).select_from(Lead).where(Lead.created_at >= now - timedelta(days=1))) or 0
     today_tasks = [t for t in tasks if t.due_at >= day_start]
     overdue = [t for t in tasks if t.due_at < day_start]
     if today_tasks:
@@ -121,6 +118,4 @@ async def morning_brief(db: Database, settings: Settings, now: datetime, weather
     if sm["budget"]:
         left = f"осталось {fs.rub(sm['remaining'])}" if sm["remaining"] > 0 else f"перерасход {fs.rub(-sm['remaining'])}"
         lines.append(f"\nБюджет месяца: {left}" + (f", {fs.rub(sm['per_day'])} в день" if sm["per_day"] else ""))
-    if leads_on:
-        lines.append(f"Заявок с сайта за сутки: {leads}")
     return "\n".join(lines)

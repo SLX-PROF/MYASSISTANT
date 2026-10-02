@@ -153,13 +153,21 @@ class TelegramBot:
         handler: Handler,
         transcriber=None,
         note_saver: NoteSaver | None = None,
+        allowed: set[int] | None = None,
+        content_only: set[int] | None = None,
+        offset_key: str = "telegram_offset",
+        menu: bool = True,
+        commands: list[tuple[str, str]] | None = None,
     ):
         self.api = api
         self.transcriber = transcriber
         self.note_saver = note_saver
         self.settings = settings
-        self.allowed = settings.telegram_chat_ids
-        self.content_only = settings.content_chat_ids
+        self.allowed = settings.telegram_chat_ids if allowed is None else allowed
+        self.content_only = settings.content_chat_ids if content_only is None else content_only
+        self.OFFSET_KEY = offset_key
+        self.menu = menu
+        self.commands = commands
         self.db = db
         self.handler = handler
         self._task: asyncio.Task | None = None
@@ -177,7 +185,17 @@ class TelegramBot:
 
     async def _setup_menu(self) -> None:
         """The button next to the input field opens Atlas (or only the content plan) as a Mini App."""
-        if not self.settings.miniapp_url:
+        # Polling does not work while a webhook is set (e.g. an old bot that ran other code).
+        try:
+            await self.api.call("deleteWebhook")
+        except TelegramError as e:
+            log.warning("telegram deleteWebhook: %s", e)
+        if self.commands is not None:
+            try:
+                await self.api.call("setMyCommands", commands=[{"command": c, "description": d} for c, d in self.commands])
+            except TelegramError as e:
+                log.warning("telegram setMyCommands: %s", e)
+        if not self.menu or not self.settings.miniapp_url:
             return
         buttons = [(c, "Атлас", self.settings.miniapp_url) for c in self.allowed]
         buttons += [(c, "Контент-план", self.settings.content_miniapp_url) for c in self.content_only]

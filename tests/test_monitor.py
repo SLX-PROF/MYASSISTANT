@@ -39,6 +39,9 @@ class FakeMessenger:
     async def send_lead(self, text):
         await self.send(text, title="Новая заявка")
 
+    async def send_work(self, text, title="Forbsa"):
+        await self.send(text, title=title)
+
 
 # --------------------------------------------------------------- thresholds
 

@@ -8,7 +8,7 @@ from pydantic import SecretStr
 
 from app.briefing import morning_brief
 from app.channels.telegram import TelegramBot, forwarded_text
-from app.db.models import Lead, Task
+from app.db.models import Task
 from app.finance import service as fs
 from app.monitor import host as hostmod
 from app.monitor.checks import ALARM, OK, WARN
@@ -208,13 +208,12 @@ async def test_morning_brief(fdb, settings):
         s.add(Task(title="Позвонить юристу", due_at=datetime(2026, 10, 12, 15, 0, tzinfo=tz), due_has_time=True))
         s.add(Task(title="Отчёт", due_at=datetime(2026, 10, 10, 0, 0, tzinfo=tz)))
         s.add(Task(title="Потом", due_at=datetime(2026, 10, 20, 0, 0, tzinfo=tz)))
-        s.add(Lead(id=1, created_at=now - timedelta(hours=3), type="dealer", source="form"))
         await s.commit()
-    text = await morning_brief(fdb, settings, now, "+12°, ясно", leads_on=True)
+    text = await morning_brief(fdb, settings, now, "+12°, ясно")
     assert text.startswith("Доброе утро! Понедельник, 12 октября")
     assert "Погода (Москва): +12°, ясно" in text
     assert "• Позвонить юристу — 15:00" in text and "Просрочено (1)" in text and "Потом" not in text
-    assert "Заявок с сайта за сутки: 1" in text
+    assert "аявк" not in text  # work stays in the work bot
 
 
 # ---------------------------------------------------- server and backups

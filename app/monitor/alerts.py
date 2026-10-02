@@ -38,7 +38,11 @@ def human_duration(td: timedelta) -> str:
 
 
 class AlertManager:
-    def __init__(self, db: Database, messenger: Messenger, explainer: Explainer | None = None, clock=utcnow):
+    def __init__(
+        self, db: Database, messenger: Messenger, explainer: Explainer | None = None, clock=utcnow, mute_key: str = MUTE_KEY, work: bool = False
+    ):
+        self.mute_key = mute_key
+        self.work = work  # site alerts go to the work bot
         self.db = db
         self.messenger = messenger
         self.explainer = explainer
@@ -46,12 +50,12 @@ class AlertManager:
 
     async def mute_until(self) -> datetime | None:
         async with self.db.session() as s:
-            v = await kv.get(s, MUTE_KEY)
+            v = await kv.get(s, self.mute_key)
         return datetime.fromisoformat(v) if v else None
 
     async def set_mute(self, until: datetime | None) -> None:
         async with self.db.session() as s:
-            await kv.put(s, MUTE_KEY, until.isoformat() if until else None)
+            await kv.put(s, self.mute_key, until.isoformat() if until else None)
             await s.commit()
 
     async def process(self, results: list[CheckResult]) -> list[str]:
@@ -104,7 +108,10 @@ class AlertManager:
                     note = None
                 if note:
                     text += "\n\n" + note
-            await self.messenger.send(text, title="Мониторинг")
+            if self.work:
+                await self.messenger.send_work(text, title="Мониторинг")
+            else:
+                await self.messenger.send(text, title="Мониторинг")
             sent.append(text)
         return sent
 

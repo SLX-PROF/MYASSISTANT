@@ -244,3 +244,55 @@ async def test_login_requires_second_factor(tmp_path):
             assert r.status_code == 401 and "код" in r.json()["detail"]
             r = await c.post("/api/auth/login", json={"password": PASSWORD, "code": totp_code(RFC_SECRET)})
             assert r.status_code == 200
+
+
+async def test_two_bots_split_personal_and_work(db, settings):
+    from app.monitor.commands import WorkCommandHandler
+
+    h, monitor, regular = make_handler(db, settings)
+    personal = CommandHandler(db, monitor, regular, h.agent, include_work=False)
+    # The personal bot knows nothing about the site.
+    help_text = await personal(1, "/help")
+    assert "/status" not in help_text and "/leads" not in help_text and "/mail" in help_text
+    assert "Не знаю такой команды" in await personal(1, "/status")
+    assert "Не знаю такой команды" in await personal(1, "/leads")
+    # The work bot serves only site commands and does not talk to the assistant.
+    work = WorkCommandHandler(monitor, regular)
+    assert "/status" in await work(1, "/help")
+    assert "Заявок пока нет" in await work(1, "/leads")
+    assert "только команды по сайту" in await work(1, "напомни купить молоко")
+    assert "только команды по сайту" in await work(1, "/mail")
+
+
+async def test_site_traffic_goes_to_work_bot(db, settings):
+    from pydantic import SecretStr
+
+    from app.events import EventBus
+    from app.monitor.messenger import Messenger
+
+    class Tg:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, chat_id, text):
+            self.sent.append((chat_id, text))
+
+    st = settings.model_copy(
+        update={
+            "telegram_bot_token": SecretStr("main"),
+            "telegram_allowed_chat_ids": "1",
+            "work_telegram_bot_token": SecretStr("work"),
+            "work_telegram_chat_ids": "1",
+        }
+    )
+    assert st.work_bot_enabled
+    main, work = Tg(), Tg()
+    m = Messenger(st, db, EventBus(), main, work)
+    alerts = AlertManager(db, m, work=True)
+    from app.monitor.checks import ALARM, CheckResult
+
+    await alerts.process([CheckResult("health", "Сайт не отвечает", ALARM, "502")])
+    await m.send_lead("Новая заявка №7")
+    await m.send("Платёж завтра: аренда")
+    assert [t for _, t in work.sent] == ["Тревога: Сайт не отвечает\n502", "Новая заявка №7"]
+    assert [t for _, t in main.sent] == ["Платёж завтра: аренда"]

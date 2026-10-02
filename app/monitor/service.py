@@ -229,7 +229,7 @@ class MonitorService:
 
     async def check_regular(self) -> None:
         for text in await self.regular.check():
-            await self.messenger.send(text, title="Регулярная задача")
+            await self.messenger.send_work(text, title="Регулярная задача")
 
     # ------------------------------------------------------------ reports
 
@@ -315,9 +315,7 @@ class MonitorService:
         now = self.clock()
         avail = await self.availability(7)
         async with self.db.session() as s:
-            spent = await usage.month_spend_usd(s)
             last = await kv.get(s, "last_status") or {}
-        budget = self.settings.llm_monthly_budget_usd
         overdue = await self.regular.overdue()
         active = await self.alerts.active()
         lines = ["Сводка за неделю"]
@@ -329,7 +327,6 @@ class MonitorService:
                 lines.append("Перезагрузка сервера: " + ("нужна" if reboot else "не нужна"))
             if last.get("sshBanned") is not None:
                 lines.append(f"Заблокировано fail2ban: {last.get('sshBanned')}")
-        lines.append(f"Расход Claude: ${spent:.2f}" + (f" из ${budget:.2f}" if budget > 0 else ""))
         if active:
             lines.append("Открытые проблемы: " + "; ".join(a.title for a in active))
         if overdue:
@@ -337,7 +334,7 @@ class MonitorService:
         else:
             lines.append("Просроченных регулярных задач нет.")
         text = "\n".join(lines)
-        await self.messenger.send(text, title="Сводка за неделю")
+        await self.messenger.send_work(text, title="Сводка за неделю")
         return text
 
     # ---------------------------------------------------------- operations

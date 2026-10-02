@@ -28,13 +28,13 @@ class Messenger:
         db: Database,
         bus: EventBus,
         telegram: TelegramAPI | None,
-        leads_telegram: TelegramAPI | None = None,
+        work_telegram: TelegramAPI | None = None,
     ):
         self.settings = settings
         self.db = db
         self.bus = bus
         self.telegram = telegram
-        self.leads_telegram = leads_telegram
+        self.work_telegram = work_telegram
         self.sent: list[str] = []  # recent messages (for tests and debugging)
 
     async def send(self, text: str, title: str = "Атлас") -> None:
@@ -51,24 +51,25 @@ class Messenger:
                 return
         await self._to_web(text, title)
 
-    async def send_lead(self, text: str) -> None:
-        """New site leads go to the separate leads bot when it is configured.
-
-        If that bot cannot deliver to anyone, fall back to the normal route
-        so a lead is never lost.
-        """
-        if self.leads_telegram and self.settings.leads_chat_ids:
+    async def send_work(self, text: str, title: str = "Forbsa") -> None:
+        """Everything about the site (leads, alerts, chores, reports) goes to the
+        work bot when it is configured. If it cannot deliver to anyone, fall back
+        to the main route so nothing is lost."""
+        if self.work_telegram and self.settings.work_chat_ids:
             delivered = False
-            for chat in self.settings.leads_chat_ids:
+            for chat in self.settings.work_chat_ids:
                 try:
-                    await self.leads_telegram.send_message(chat, text)
+                    await self.work_telegram.send_message(chat, text)
                     delivered = True
                 except TelegramError as e:
-                    log.warning("leads bot send failed: %s", e)
+                    log.warning("work bot send failed: %s", e)
             if delivered:
                 self.sent = (self.sent + [text])[-50:]
                 return
-        await self.send(text, title="Новая заявка")
+        await self.send(text, title=title)
+
+    async def send_lead(self, text: str) -> None:
+        await self.send_work(text, title="Новая заявка")
 
     async def send_content(self, text: str) -> None:
         """Content-plan notifications go to the content-only recipients when set

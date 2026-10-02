@@ -30,14 +30,13 @@ from app.db.models import utcnow
 from app.db.session import Database, migrate
 from app.events import EventBus
 from app.monitor.alerts import AlertManager
-from app.monitor.commands import CommandHandler
+from app.monitor.commands import MAIN_COMMANDS, WORK_COMMANDS, CommandHandler, WorkCommandHandler
 from app.monitor.explain import Explainer
 from app.monitor.host import HostMonitor
 from app.monitor.messenger import Messenger
 from app.monitor.regular import RegularTasks
 from app.monitor.service import MonitorService
 from app.monitor.site import SiteClient
-from app.monitor.tools import monitor_tools
 from app.notes import service as notes_service
 from app.notes.tools import notes_tools
 from app.scheduler import ReminderScheduler
@@ -73,9 +72,9 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
             if settings.telegram_enabled
             else None
         )
-        leads_telegram = (
-            TelegramAPI(settings.leads_telegram_bot_token.get_secret_value(), settings.telegram_api_base)
-            if settings.leads_bot_enabled
+        work_telegram = (
+            TelegramAPI(settings.work_token, settings.telegram_api_base)
+            if settings.work_bot_enabled
             else None
         )
         notifiers = [WebNotifier(bus)]
@@ -94,15 +93,15 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
                 llm = FakeProvider(tz=settings.tz)
 
         # Site duty, regular tasks, Telegram
-        messenger = Messenger(settings, db, bus, telegram, leads_telegram)
+        messenger = Messenger(settings, db, bus, telegram, work_telegram)
         explainer = Explainer(db, settings, llm) if not isinstance(llm, FakeProvider) else None
-        alerts = AlertManager(db, messenger, explainer)
+        alerts = AlertManager(db, messenger, explainer, work=True)  # site alerts -> work bot
         regular = RegularTasks(db, settings)
         site = SiteClient(settings) if settings.monitoring_enabled else None
         monitor = MonitorService(db, settings, messenger, alerts, regular, site)
-        extra_tools = monitor_tools(monitor, regular) if settings.monitoring_enabled else []
-        extra_tools += content_tools() + finance_tools() + notes_tools()
-        host = HostMonitor(db, settings, messenger, alerts, telegram)
+        # The personal assistant has no site tools: work lives in the work bot.
+        extra_tools = content_tools() + finance_tools() + notes_tools()
+        host = HostMonitor(db, settings, messenger, AlertManager(db, messenger, None, mute_key="mute_until_host"), telegram)
         st_mail = None
         if settings.mail_enabled:
             from app.mail.digest import MailDigest
@@ -175,7 +174,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
                 await messenger.send(text, title="Финансы за неделю")
 
         async def brief() -> None:
-            text = await morning_brief(db, settings, utcnow(), await weather(settings), leads_on=site is not None)
+            text = await morning_brief(db, settings, utcnow(), await weather(settings))
             await messenger.send(text, title="Утро")
 
         async def mail_digest() -> None:
@@ -234,18 +233,39 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
                     await s.commit()
                     return f"Сохранил в заметки: {notes_service.short(n)}\nНайти потом: «что я сохранял про …»"
 
+            work_in_main = not work_telegram  # site commands stay in the main bot until the work bot is set up
             bot = TelegramBot(
-                telegram, settings, db, CommandHandler(db, monitor, regular, st.agent, mail=st_mail), transcriber=transcriber, note_saver=save_forward
+                telegram,
+                settings,
+                db,
+                CommandHandler(db, monitor, regular, st.agent, mail=st_mail, include_work=work_in_main),
+                transcriber=transcriber,
+                note_saver=save_forward,
+                commands=MAIN_COMMANDS + (WORK_COMMANDS[:-1] if work_in_main else []),
             )
             bot.start()
+        work_bot = None
+        if work_telegram:
+            work_bot = TelegramBot(
+                work_telegram,
+                settings,
+                db,
+                WorkCommandHandler(monitor, regular),
+                allowed=settings.work_chat_ids,
+                content_only=set(),
+                offset_key="telegram_offset_work",
+                menu=False,
+                commands=WORK_COMMANDS,
+            )
+            work_bot.start()
         log.info(
-            "Atlas started (llm=%s, model=%s, tz=%s, telegram=%s, monitoring=%s, leads bot=%s, mini app=%s)",
+            "Atlas started (llm=%s, model=%s, tz=%s, telegram=%s, monitoring=%s, work bot=%s, mini app=%s)",
             llm.name,
             llm.model,
             settings.timezone,
             "on" if telegram else "off",
             "on" if site else "off",
-            "on" if leads_telegram else "off",
+            "on" if work_telegram else "off",
             "on" if settings.miniapp_url else "off",
         )
         st.host = host
@@ -260,8 +280,10 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
                 await site.aclose()
             if telegram:
                 await telegram.aclose()
-            if leads_telegram:
-                await leads_telegram.aclose()
+            if work_bot:
+                await work_bot.stop()
+            if work_telegram:
+                await work_telegram.aclose()
             await llm.aclose()
             await db.dispose()
 
