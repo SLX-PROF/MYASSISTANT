@@ -60,20 +60,21 @@ export function Sidebar() {
 }
 
 export function BottomNav() {
-  const { route, navigate, conversations } = useStore();
+  const { route, navigate, conversations, setSidebarOpen } = useStore();
   const unread = conversations.reduce((n, c) => n + c.unread, 0);
   const lastId = conversations[0]?.id ?? null;
-  const items: { r: Route; label: string; icon: React.ReactNode; active: boolean; badge?: number }[] = [
+  const items: { r: Route | null; label: string; icon: React.ReactNode; active: boolean; badge?: number }[] = [
     { r: { name: "chat", id: route.name === "chat" ? route.id : lastId }, label: "Чат", icon: <MessageSquare size={20} aria-hidden="true" />, active: route.name === "chat", badge: unread },
     { r: { name: "tasks" }, label: "Задачи", icon: <ListChecks size={20} aria-hidden="true" />, active: route.name === "tasks" },
-    { r: { name: "reminders" }, label: "Напоминания", icon: <AlarmClock size={20} aria-hidden="true" />, active: route.name === "reminders" },
+    { r: { name: "content" }, label: "Контент", icon: <CalendarHeart size={20} aria-hidden="true" />, active: false },
     { r: { name: "finance" }, label: "Финансы", icon: <Wallet size={20} aria-hidden="true" />, active: route.name === "finance" },
-    { r: { name: "settings" }, label: "Ещё", icon: <Ellipsis size={20} aria-hidden="true" />, active: route.name === "settings" || route.name === "memory" },
+    // "More" opens the side menu: reminders, memory, settings and conversations.
+    { r: null, label: "Ещё", icon: <Ellipsis size={20} aria-hidden="true" />, active: ["reminders", "memory", "settings"].includes(route.name) },
   ];
   return (
     <nav className="bottom-nav" aria-label="Основные разделы">
       {items.map((it) => (
-        <button key={it.label} type="button" aria-current={it.active ? "page" : undefined} onClick={() => navigate(it.r)}>
+        <button key={it.label} type="button" aria-current={it.active ? "page" : undefined} onClick={() => (it.r ? navigate(it.r) : setSidebarOpen(true))}>
           {it.icon}
           {it.label}
           {!!it.badge && <span className="badge">{it.badge}</span>}
