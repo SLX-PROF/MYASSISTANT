@@ -4,7 +4,7 @@
 
 1. Новый VPS, пользователь `atlas` с ключом SSH, пароль для sudo сохранить в менеджер паролей.
 2. `sudo apt install -y docker.io docker-compose-v2 caddy` и `curl -fsSL https://tailscale.com/install.sh | sh`, затем `sudo tailscale up --advertise-exit-node`.
-3. Если IP изменился: поправить `default_bind` в `deploy/Caddyfile`, затем `sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy`. Обновить DNS-запись домена.
+3. Если IP изменился: поправить `default_bind` в `deploy/Caddyfile`, затем `sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy`. Обновить DNS: запись A для contentplanpoliinag.dpdns.org на новый IP (сейчас 141.133.175.204, без AAAA и CAA). Зона обслуживается DNS-серверами digitalplat.org (dns1/dns2), запись меняется в кабинете DigitalPlat.
 4. `git clone https://github.com/SLX-PROF/MYASSISTANT.git ~/atlas && cd ~/atlas`; `.env` из менеджера паролей положить в `~/atlas/.env`, права 644 (контейнер читает под uid 10001).
 5. Данные: распаковать последний архив из Telegram (или `data/backups`) в том `atlas-data`: `atlas.db` и `media/`. Атлас при этом остановлен.
 6. `docker compose up -d --build`, затем `sudo tailscale serve --bg 8000`.
