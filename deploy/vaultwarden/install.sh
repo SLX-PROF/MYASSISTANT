@@ -4,6 +4,7 @@ set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 chmod +x "$HERE/backup.sh"
+mkdir -p "$HERE/../../host/vault" && chown atlas:atlas "$HERE/../../host/vault"   # docker would otherwise create it as root
 tailscale serve --bg --https=8443 http://127.0.0.1:8222
 cat > /etc/systemd/system/vaultwarden-backup.service <<UNIT
 [Unit]
