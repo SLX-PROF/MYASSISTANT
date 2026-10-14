@@ -247,6 +247,8 @@ async def test_weekly_archive(db, settings):
     media = settings.data_dir / "media" / "content"
     media.mkdir(parents=True)
     (media / "a.jpg").write_bytes(b"\xff\xd8photo")
+    (settings.data_dir / "vault").mkdir()
+    (settings.data_dir / "vault" / "db-1.sqlite3").write_bytes(b"vault")
 
     class Doc:
         def __init__(self):
@@ -260,7 +262,7 @@ async def test_weekly_archive(db, settings):
     h = hostmod.HostMonitor(db, st, Msgr(), alerts=None, telegram=tg)
     path = await h.weekly_archive()
     with tarfile.open(path) as tar:
-        assert set(tar.getnames()) >= {"atlas.db", "media/content/a.jpg"}
+        assert set(tar.getnames()) >= {"atlas.db", "media/content/a.jpg", "vault/db-1.sqlite3"}
     assert tg.docs and tg.docs[0][0] == 111 and "база и фото" in tg.docs[0][3]
     for _ in range(3):
         backup.archive(settings.data_dir, keep=2)

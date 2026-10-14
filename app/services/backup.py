@@ -25,7 +25,7 @@ def backup_database(data_dir: Path, keep: int = 14) -> Path:
 
 
 def archive(data_dir: Path, keep: int = 6, with_media: bool = True) -> Path:
-    """data/backups/weekly/atlas-YYYYMMDD-HHMMSS.tar.gz with atlas.db and media/.
+    """data/backups/weekly/atlas-YYYYMMDD-HHMMSS.tar.gz with atlas.db, media/ and vault/ (encrypted password-vault copies, if mounted).
 
     Restore: stop Atlas, unpack into the data volume (atlas.db and media/), start.
     Without media the name ends in -db.tar.gz and is not counted for rotation.
@@ -51,6 +51,9 @@ def archive(data_dir: Path, keep: int = 6, with_media: bool = True) -> Path:
             media = data_dir / "media"
             if with_media and media.is_dir():
                 tar.add(media, arcname="media")
+            vault = data_dir / "vault"  # read-only mount of the Vaultwarden backups (deploy/vaultwarden)
+            if vault.is_dir():
+                tar.add(vault, arcname="vault")
     if with_media:
         for old in sorted(p for p in out_dir.glob("atlas-*.tar.gz") if not p.name.endswith("-db.tar.gz"))[:-keep]:
             old.unlink()

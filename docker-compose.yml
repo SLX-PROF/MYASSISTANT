@@ -12,6 +12,7 @@ services:
       - atlas-data:/data          # SQLite database (and future attachments)
       - ./.env:/app/.env:ro        # settings and secrets, read by the app
       - ./host:/host:ro            # server counters written by cron (traffic)
+      - ./host/vault:/data/vault:ro   # Vaultwarden backups (deploy/vaultwarden), go into the weekly archive
     environment:
       HOST: 0.0.0.0                # inside the container; host exposure is set by "ports"
       DATA_DIR: /data

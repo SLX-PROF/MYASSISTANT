@@ -9,4 +9,5 @@
 5. Данные: распаковать последний архив из Telegram (или `data/backups`) в том `atlas-data`: `atlas.db` и `media/`. Атлас при этом остановлен.
 6. `docker compose up -d --build`, затем `sudo tailscale serve --bg 8000`.
 7. `sudo bash deploy/harden.sh` (swap, файрвол, fail2ban, сторож, очистка Docker). Держать запасное окно SSH.
-8. Проверка: `docker compose logs --tail 20 atlas` ждём «Atlas started»; `/status` в боте.
+8. Хранилище паролей: `cd ~/atlas/deploy/vaultwarden && docker compose up -d`, затем `sudo bash install.sh`. Базу взять из `vault/` в последнем недельном архиве (файл `db-*.sqlite3` положить как `db.sqlite3` в том `vaultwarden_vw-data` при остановленном контейнере). Вход прежний, мастер-пароль нужен.
+9. Проверка: `docker compose logs --tail 20 atlas` ждём «Atlas started»; `/status` в боте.
