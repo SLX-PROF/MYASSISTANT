@@ -1,0 +1,13 @@
+{
+	default_bind 141.133.175.204
+}
+
+contentplanpoliinag.dpdns.org {
+	encode zstd gzip
+	@private {
+		path /api/*
+		not path /api/content* /api/auth/login /api/auth/telegram /api/auth/me /api/auth/logout
+	}
+	respond @private 404
+	reverse_proxy 127.0.0.1:8000
+}
