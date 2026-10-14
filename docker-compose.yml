@@ -19,6 +19,8 @@ services:
       # Requests reach the app via Docker's proxy, so trust X-Forwarded-For from it.
       # Safe while the port is bound to 127.0.0.1 (only a local reverse proxy can connect).
       FORWARDED_ALLOW_IPS: "*"
+    # Cap so a memory spike (voice model, mail digest) restarts only Atlas, not the whole VPS.
+    mem_limit: 2g
     read_only: true
     tmpfs:
       - /tmp
